@@ -354,7 +354,7 @@ export default function App() {
                           <tbody className="divide-y divide-green-900/20">
                             {ticketDatabase.length === 0 ? (
                               <tr>
-                                <td colSpan="4" className="p-8 text-center text-gray-500">No tickets generated yet.</td>
+                                <td colSpan={4} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
                               </tr>
                             ) : (
                               ticketDatabase.map((ticket: any, idx: any) => (
