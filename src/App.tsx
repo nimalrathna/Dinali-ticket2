@@ -7,6 +7,11 @@ const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
 export default function App() {
   const TICKET_PRICE = 40;
   
+  // Set the document title for PDF saving
+  useEffect(() => {
+    document.title = "Tickets-Swaranga Dinali Live in Concert 27June";
+  }, []);
+
   // --- Dynamic Capacity State ---
   const [maxTickets, setMaxTickets] = useState<number>(() => {
     const saved = localStorage.getItem('dinali_max_tickets');
@@ -27,6 +32,7 @@ export default function App() {
 
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
+  const [mobile, setMobile] = useState<string>(''); // NEW: Mobile State
   const [quantity, setQuantity] = useState<number>(1);
   const [requestStatus, setRequestStatus] = useState<string>('idle');
   
@@ -51,15 +57,15 @@ export default function App() {
     if (isAdmin) {
       // Direct instant generation for admins
       setRequestStatus('approving');
-      await processTicketAndSendToBackend(guestName, email, quantity);
+      await processTicketAndSendToBackend(guestName, email, mobile, quantity);
     } else {
       // Public flow
       setRequestStatus('submitting');
-      await processTicketAndSendToBackend(guestName, email, quantity);
+      await processTicketAndSendToBackend(guestName, email, mobile, quantity);
     }
   };
 
-  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, qty: number) => {
+  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, guestMobile: string, qty: number) => {
     const newTicketNumber = ticketsSold + qty;
     const formattedNumber = newTicketNumber.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -67,6 +73,7 @@ export default function App() {
     const payload = {
       name: guestName,
       email: guestEmail,
+      mobile: guestMobile, // Added Mobile to Payload
       quantity: qty,
       ticketId: uniqueId,
       ticketNumber: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
@@ -92,12 +99,12 @@ export default function App() {
     } finally {
       // Generate UI Ticket after small delay so the user isn't blocked by slow networks
       setTimeout(() => {
-        generateFinalTicket(guestName, guestEmail, qty, uniqueId);
+        generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId);
       }, 800);
     }
   };
 
-  const generateFinalTicket = (guestName: string, guestEmail: string, qty: number, predefinedId: any = null) => {
+  const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, qty: number, predefinedId: any = null) => {
     const newTicketNumber = ticketsSold + qty;
     const formattedNumber = newTicketNumber.toString().padStart(3, '0');
     const uniqueId = predefinedId || `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -105,6 +112,7 @@ export default function App() {
     const finalTicket = {
       name: guestName,
       email: guestEmail || 'No Email Provided',
+      mobile: guestMobile || 'No Mobile Provided',
       quantity: qty,
       totalPrice: qty * TICKET_PRICE,
       number: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
@@ -125,6 +133,7 @@ export default function App() {
     setUserTicket(null);
     setName('');
     setEmail('');
+    setMobile(''); // Reset mobile field
     setQuantity(1);
     setRequestStatus('idle');
   };
@@ -319,6 +328,13 @@ export default function App() {
                         className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
                         placeholder="Email (Optional)"
                       />
+                      <input 
+                        type="tel" 
+                        value={mobile}
+                        onChange={(e) => setMobile(e.target.value)}
+                        className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
+                        placeholder="Mobile Number (Optional)"
+                      />
                       <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
                         <span className="text-gray-400 text-sm px-2">Total Passes</span>
                         <select
@@ -345,6 +361,7 @@ export default function App() {
                           <thead className="bg-green-900/20 text-green-500 uppercase tracking-widest sticky top-0 backdrop-blur-md">
                             <tr>
                               <th className="p-4 font-medium">Guest</th>
+                              <th className="p-4 font-medium">Mobile</th>
                               <th className="p-4 font-medium">Passes</th>
                               <th className="p-4 font-medium">ID</th>
                               <th className="p-4 font-medium text-right">Action</th>
@@ -353,12 +370,13 @@ export default function App() {
                           <tbody className="divide-y divide-green-900/20">
                             {ticketDatabase.length === 0 ? (
                               <tr>
-                                <td colSpan={4} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
+                                <td colSpan={5} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
                               </tr>
                             ) : (
                               ticketDatabase.map((ticket: any, idx: any) => (
                                 <tr key={idx} className="hover:bg-green-900/10 transition-colors">
                                   <td className="p-4 text-white">{ticket.name}</td>
+                                  <td className="p-4 text-gray-400">{ticket.mobile !== 'No Mobile Provided' ? ticket.mobile : '-'}</td>
                                   <td className="p-4 text-gray-400">{ticket.quantity}</td>
                                   <td className="p-4 text-gray-500 font-mono">{ticket.id.split('-')[2]}</td>
                                   <td className="p-4 text-right">
@@ -432,6 +450,16 @@ export default function App() {
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full bg-transparent border-b border-red-900/50 px-2 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors text-lg font-light tracking-wide"
                         placeholder="Email Address"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <input 
+                        type="tel" 
+                        required
+                        value={mobile}
+                        onChange={(e) => setMobile(e.target.value)}
+                        className="w-full bg-transparent border-b border-red-900/50 px-2 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors text-lg font-light tracking-wide"
+                        placeholder="Mobile Number"
                       />
                     </div>
                     
