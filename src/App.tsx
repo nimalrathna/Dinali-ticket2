@@ -48,8 +48,15 @@ export default function App() {
     if (!name && !isAdmin) return; 
     const guestName = name || "VIP Guest";
 
-    setRequestStatus('submitting');
-    await processTicketAndSendToBackend(guestName, email, quantity);
+    if (isAdmin) {
+      // Direct instant generation for admins
+      setRequestStatus('approving');
+      await processTicketAndSendToBackend(guestName, email, quantity);
+    } else {
+      // Public flow
+      setRequestStatus('submitting');
+      await processTicketAndSendToBackend(guestName, email, quantity);
+    }
   };
 
   const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, qty: number) => {
@@ -71,11 +78,11 @@ export default function App() {
       const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwujw7dn8KM-A633_gugteQvUWB3Rb9JcV4M83qRbx-qCDcd54CTFHlEVs441Maw0Y/exec";
 
       // Send the data to Google Sheets
+      // Using text/plain bypasses the browser's strict CORS preflight check for faster processing
       await fetch(GOOGLE_API_URL, {
         method: "POST",
-        mode: "no-cors", // Required to prevent Google's strict CORS block
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "text/plain;charset=utf-8",
         },
         body: JSON.stringify(payload)
       });
@@ -155,7 +162,7 @@ export default function App() {
     <div className="min-h-screen bg-[#150103] text-white relative overflow-x-hidden font-sans selection:bg-yellow-500/30">
       
       {/* --- CINEMATIC LIGHTING ENGINE --- */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 print-hide">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] h-[100vh] bg-[radial-gradient(circle_at_center,_rgba(80,10,20,0.6)_0%,_rgba(20,2,4,1)_80%)]"></div>
         <div className="absolute top-[-20%] left-[-10%] w-[50vw] h-[150vh] bg-[conic-gradient(from_120deg_at_50%_0%,rgba(212,175,55,0.15)_0deg,transparent_60deg)] origin-top transform rotate-12 blur-[40px] animate-spotlight-sweep"></div>
         <div className="absolute top-[-20%] right-[-10%] w-[50vw] h-[150vh] bg-[conic-gradient(from_240deg_at_50%_0%,transparent_0deg,rgba(212,175,55,0.1)_60deg)] origin-top transform -rotate-12 blur-[50px] animate-spotlight-sweep-reverse"></div>
@@ -194,7 +201,7 @@ export default function App() {
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 py-8 flex flex-col items-center min-h-screen">
         
-        <div className="text-center w-full flex flex-col items-center relative z-20">
+        <div className="text-center w-full flex flex-col items-center relative z-20 print-hide">
           <div className="inline-flex items-center space-x-3 px-6 py-1.5 border border-white/10 rounded-full text-[10px] md:text-xs font-bold tracking-[0.3em] uppercase text-yellow-500/80 mb-6 backdrop-blur-md bg-black/20 shadow-[0_0_30px_rgba(212,175,55,0.1)]">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
             <span>Live Experience</span>
@@ -238,7 +245,7 @@ export default function App() {
           
           {isAdmin && !userTicket ? (
             /* --- ORGANIZER DASHBOARD --- */
-            <div className="w-full max-w-4xl relative group animate-fade-in">
+            <div className="w-full max-w-4xl relative group animate-fade-in print-hide">
               <div className="absolute -inset-1 bg-gradient-to-r from-green-600/20 to-emerald-900/40 rounded-3xl blur-xl opacity-50"></div>
               
               <div className="relative w-full bg-[#0a120a]/90 border border-green-900/40 backdrop-blur-2xl rounded-3xl p-8 md:p-10 shadow-2xl">
@@ -295,7 +302,7 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                   <div className="lg:col-span-1 bg-black/40 border border-green-900/20 p-6 rounded-2xl">
                     <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6">Direct Ticket Generator</h3>
-                    <p className="text-xs text-gray-400 mb-6">Generate tickets instantly for your guest list without approval. You can download the generated ticket to send via WhatsApp.</p>
+                    <p className="text-xs text-gray-400 mb-6">Generate tickets instantly for your guest list. This will trigger the email and Google Sheet update automatically.</p>
                     
                     <form onSubmit={handleGenerateTicket} className="space-y-4">
                       <input 
@@ -324,8 +331,8 @@ export default function App() {
                           ))}
                         </select>
                       </div>
-                      <button type="submit" className="w-full bg-green-600 hover:bg-green-500 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors">
-                        Generate & Open Ticket
+                      <button type="submit" disabled={requestStatus === 'approving'} className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors">
+                        {requestStatus === 'approving' ? 'Generating...' : 'Generate & Open Ticket'}
                       </button>
                     </form>
                   </div>
@@ -369,16 +376,13 @@ export default function App() {
                         </table>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-600 mt-4 leading-relaxed">
-                      * In a production environment, this dashboard connects directly to Google Sheets via Apps Script, allowing you to track emails, approve requests, and automate WhatsApp/Email dispatch.
-                    </p>
                   </div>
                 </div>
               </div>
             </div>
           ) : requestStatus === 'idle' || requestStatus === 'submitting' ? (
             /* --- REGULAR BOOKING WIDGET --- */
-            <div className="w-full max-w-lg relative group">
+            <div className="w-full max-w-lg relative group print-hide">
               <div className="absolute -inset-1 bg-gradient-to-r from-yellow-600/30 to-red-900/50 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition duration-1000"></div>
               
               <div className="relative w-full bg-[#1a0205]/80 border border-red-900/40 backdrop-blur-2xl rounded-3xl p-8 md:p-10 shadow-2xl">
@@ -475,7 +479,7 @@ export default function App() {
             /* --- THE 3D TICKET VIEW --- */
             <div className="w-full flex flex-col items-center animate-fade-in-up mt-[-40px]">
               
-              <p className="text-xs text-green-400 tracking-[0.3em] uppercase mb-12 animate-pulse drop-shadow-md">Credentials Verified</p>
+              <p className="text-xs text-green-400 tracking-[0.3em] uppercase mb-12 animate-pulse drop-shadow-md print-hide">Credentials Verified</p>
 
               <div 
                 className="perspective-1000 mb-12"
@@ -696,7 +700,7 @@ export default function App() {
         .animate-twinkle-star { animation: twinkle-star 3s ease-in-out infinite; }
         
         @media print {
-          @page { size: landscape; margin: 0; }
+          @page { size: landscape; margin: 10mm; }
           
           html, body { 
             background: #150103 !important; 
@@ -704,28 +708,17 @@ export default function App() {
             print-color-adjust: exact !important; 
           }
           
-          /* Hide everything by default */
-          body * { 
-            visibility: hidden; 
+          .print-hide {
+            display: none !important;
           }
           
-          /* Show ONLY the digital ticket and its children */
-          #digital-ticket, #digital-ticket * { 
-            visibility: visible; 
-          }
-          
-          /* Position the ticket perfectly on the page */
           #digital-ticket { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            transform: none !important; /* Disables the 3D mouse tilt */
+            transform: none !important; 
             box-shadow: none !important;
-            border: none !important;
-            margin: 20px !important;
+            margin: 0 auto !important;
+            page-break-inside: avoid;
           }
           
-          /* Hide the interactive holographic mouse glare */
           .mix-blend-screen { 
             display: none !important; 
           }
