@@ -25,6 +25,11 @@ export default function App() {
 
   // --- Organizer / Admin States ---
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [showAdminAuth, setShowAdminAuth] = useState<boolean>(false);
+  const [adminPassword, setAdminPassword] = useState<string>('');
+  const [authError, setAuthError] = useState<boolean>(false);
+  const [confirmReset, setConfirmReset] = useState<boolean>(false);
+
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
     return saved !== null ? JSON.parse(saved) : [];
@@ -32,7 +37,7 @@ export default function App() {
 
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [mobile, setMobile] = useState<string>(''); // NEW: Mobile State
+  const [mobile, setMobile] = useState<string>(''); 
   const [quantity, setQuantity] = useState<number>(1);
   const [requestStatus, setRequestStatus] = useState<string>('idle');
   
@@ -73,7 +78,7 @@ export default function App() {
     const payload = {
       name: guestName,
       email: guestEmail,
-      mobile: guestMobile, // Added Mobile to Payload
+      mobile: guestMobile, 
       quantity: qty,
       ticketId: uniqueId,
       ticketNumber: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
@@ -133,7 +138,7 @@ export default function App() {
     setUserTicket(null);
     setName('');
     setEmail('');
-    setMobile(''); // Reset mobile field
+    setMobile(''); 
     setQuantity(1);
     setRequestStatus('idle');
   };
@@ -141,6 +146,30 @@ export default function App() {
   const viewExistingTicket = (ticket: any) => {
     setUserTicket(ticket);
     setRequestStatus('approved');
+  };
+
+  const handleAdminAuth = (e: any) => {
+    e.preventDefault();
+    if (adminPassword === 'Dinali1984') {
+      setIsAdmin(true);
+      setShowAdminAuth(false);
+      setAdminPassword('');
+      setAuthError(false);
+    } else {
+      setAuthError(true);
+    }
+  };
+
+  const handleFactoryReset = () => {
+    if (confirmReset) {
+      setTicketsSold(0);
+      setTicketDatabase([]);
+      setConfirmReset(false);
+    } else {
+      setConfirmReset(true);
+      // Automatically cancel the reset prompt after 3 seconds
+      setTimeout(() => setConfirmReset(false), 3000);
+    }
   };
 
   const handleMouseMove = (e: any) => {
@@ -170,6 +199,51 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#150103] text-white relative overflow-x-hidden font-sans selection:bg-yellow-500/30">
       
+      {/* --- ADMIN AUTH MODAL --- */}
+      {showAdminAuth && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md print-hide p-4 animate-fade-in">
+          <div className="bg-[#0a0102] border border-red-900/50 p-8 rounded-2xl max-w-sm w-full shadow-[0_0_50px_rgba(212,175,55,0.1)] relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#D4AF37] via-[#FFF8DC] to-[#D4AF37] rounded-t-2xl"></div>
+            
+            <div className="flex items-center space-x-3 mb-6">
+              <Lock className="text-[#D4AF37]" size={24} />
+              <h3 className="text-xl text-white font-light tracking-widest uppercase">Admin Access</h3>
+            </div>
+            
+            <form onSubmit={handleAdminAuth}>
+              <div className="mb-6">
+                <input 
+                  type="password" 
+                  value={adminPassword}
+                  onChange={(e) => { setAdminPassword(e.target.value); setAuthError(false); }}
+                  className={`w-full bg-[#150103] border ${authError ? 'border-red-500' : 'border-red-900/50'} text-white p-4 rounded-lg focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                  placeholder="Enter Passcode"
+                  autoFocus
+                />
+                {authError && <p className="text-red-500 text-[10px] mt-2 uppercase tracking-widest absolute">Incorrect Passcode</p>}
+              </div>
+              
+              <div className="flex space-x-3">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowAdminAuth(false); setAdminPassword(''); setAuthError(false); }} 
+                  className="w-1/3 py-3 text-gray-400 border border-gray-800 rounded-lg uppercase text-xs font-bold tracking-widest hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="w-2/3 py-3 bg-gradient-to-r from-[#D4AF37] to-[#8B6508] text-black font-bold rounded-lg uppercase text-xs tracking-widest hover:brightness-110 transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>Unlock</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* --- CINEMATIC LIGHTING ENGINE --- */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 print-hide">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] h-[100vh] bg-[radial-gradient(circle_at_center,_rgba(80,10,20,0.6)_0%,_rgba(20,2,4,1)_80%)]"></div>
@@ -258,7 +332,7 @@ export default function App() {
               <div className="absolute -inset-1 bg-gradient-to-r from-green-600/20 to-emerald-900/40 rounded-3xl blur-xl opacity-50"></div>
               
               <div className="relative w-full bg-[#0a120a]/90 border border-green-900/40 backdrop-blur-2xl rounded-3xl p-8 md:p-10 shadow-2xl">
-                <div className="flex justify-between items-center mb-8 border-b border-green-900/50 pb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-green-900/50 pb-6">
                   <div>
                     <h2 className="text-3xl font-light tracking-wide mb-1 text-white flex items-center gap-3">
                       <ShieldCheck className="text-green-500" />
@@ -266,9 +340,20 @@ export default function App() {
                     </h2>
                     <p className="text-green-500 text-xs uppercase tracking-[0.2em]">soulsoundsbydinali@gmail.com</p>
                   </div>
-                  <button onClick={() => setIsAdmin(false)} className="text-xs uppercase tracking-widest text-gray-400 hover:text-white border border-gray-600 px-4 py-2 rounded-full">
-                    Exit Admin
-                  </button>
+                  <div className="flex items-center space-x-3">
+                    <button 
+                      onClick={handleFactoryReset} 
+                      className={`text-[10px] uppercase font-bold tracking-widest border px-4 py-2.5 rounded-full transition-all ${confirmReset ? 'bg-red-900/80 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-red-500/80 border-red-900/30 hover:text-red-400 hover:border-red-500/50 bg-black/40'}`}
+                    >
+                      {confirmReset ? "Confirm Reset?" : "Reset Data"}
+                    </button>
+                    <button 
+                      onClick={() => setIsAdmin(false)} 
+                      className="text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-white border border-gray-600 hover:border-white bg-black/40 px-4 py-2.5 rounded-full transition-all"
+                    >
+                      Exit Admin
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -660,7 +745,13 @@ export default function App() {
 
       <div className="fixed bottom-4 right-4 z-50 print-hide">
         <button 
-          onClick={() => setIsAdmin(!isAdmin)}
+          onClick={() => {
+            if (isAdmin) {
+              setIsAdmin(false);
+            } else {
+              setShowAdminAuth(true);
+            }
+          }}
           className={`p-3 rounded-full backdrop-blur-md transition-all ${isAdmin ? 'bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'bg-black/40 text-gray-600 border border-white/10 hover:text-white'}`}
           title="Organizer Login"
         >
