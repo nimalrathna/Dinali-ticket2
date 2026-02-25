@@ -67,20 +67,19 @@ export default function App() {
     };
 
     try {
-      // ⚠️ YOUR GOOGLE SCRIPT URL GOES HERE WHEN READY:
+      // Your live Google Apps Script URL
       const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwujw7dn8KM-A633_gugteQvUWB3Rb9JcV4M83qRbx-qCDcd54CTFHlEVs441Maw0Y/exec";
 
-      if (GOOGLE_API_URL !== "YOUR_GOOGLE_SCRIPT_URL_HERE") {
-        await fetch(GOOGLE_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "text/plain;charset=utf-8",
-          },
-          body: JSON.stringify(payload)
-        });
-      } else {
-        console.warn("Backend URL missing! Generating ticket locally for demo purposes.");
-      }
+      // Send the data to Google Sheets
+      await fetch(GOOGLE_API_URL, {
+        method: "POST",
+        mode: "no-cors", // Required to prevent Google's strict CORS block
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload)
+      });
+      
     } catch (error) {
       console.error("Failed to connect to backend:", error);
     } finally {
