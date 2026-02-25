@@ -42,34 +42,28 @@ export default function App() {
     localStorage.setItem('dinali_max_tickets', maxTickets.toString());
   }, [ticketsSold, ticketDatabase, maxTickets]);
 
-  const handleGenerateTicket = (e: any) => {
+  const handleGenerateTicket = async (e: any) => {
     e.preventDefault();
     if (ticketsSold + quantity > maxTickets) return;
     if (!name && !isAdmin) return; 
     const guestName = name || "VIP Guest";
 
-    if (isAdmin) {
-      generateFinalTicket(guestName, email, quantity);
-    } else {
-      setRequestStatus('submitting');
-      setTimeout(() => setRequestStatus('pending'), 1500);
-    }
+    setRequestStatus('submitting');
+    await processTicketAndSendToBackend(guestName, email, quantity);
   };
 
-  const handleAdminApprove = async () => {
-    setRequestStatus('approving');
-    
-    const newTicketNumber = ticketsSold + quantity;
+  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, qty: number) => {
+    const newTicketNumber = ticketsSold + qty;
     const formattedNumber = newTicketNumber.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const payload = {
-      name: name,
-      email: email,
-      quantity: quantity,
+      name: guestName,
+      email: guestEmail,
+      quantity: qty,
       ticketId: uniqueId,
-      ticketNumber: `${ticketsSold + 1}${quantity > 1 ? ` - ${newTicketNumber}` : ''}`,
-      totalPrice: quantity * TICKET_PRICE
+      ticketNumber: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
+      totalPrice: qty * TICKET_PRICE
     };
 
     try {
@@ -84,16 +78,15 @@ export default function App() {
           },
           body: JSON.stringify(payload)
         });
+      } else {
+        console.warn("Backend URL missing! Generating ticket locally for demo purposes.");
       }
-
-      setTimeout(() => {
-        generateFinalTicket(name, email, quantity, uniqueId);
-      }, 800);
-      
     } catch (error) {
       console.error("Failed to connect to backend:", error);
+    } finally {
+      // Generate UI Ticket after small delay so the user isn't blocked by slow networks
       setTimeout(() => {
-        generateFinalTicket(name, email, quantity, uniqueId);
+        generateFinalTicket(guestName, guestEmail, qty, uniqueId);
       }, 800);
     }
   };
@@ -479,38 +472,8 @@ export default function App() {
                 )}
               </div>
             </div>
-          ) : requestStatus === 'pending' || requestStatus === 'approving' ? (
-            /* --- PENDING VERIFICATION VIEW --- */
-            <div className="w-full max-w-md bg-[#1a0205]/80 border border-red-900/40 backdrop-blur-2xl rounded-3xl p-10 shadow-2xl text-center animate-fade-in">
-              <div className="w-16 h-16 rounded-full border border-yellow-500/30 flex items-center justify-center mx-auto mb-8 relative">
-                <div className="absolute inset-0 bg-yellow-500/10 rounded-full animate-ping opacity-50"></div>
-                <Mail className="text-yellow-500 relative z-10" size={24} />
-              </div>
-              <h2 className="text-xl font-light tracking-widest uppercase mb-4 text-white">Request Lodged</h2>
-              <p className="text-gray-400 font-light text-sm leading-relaxed mb-8">
-                Verification sent for <span className="text-white">{name}</span>. Awaiting final clearance for {quantity} pass{quantity > 1 ? 'es' : ''}.
-              </p>
-              
-              <div className="mt-8 pt-8 border-t border-white/5 relative">
-                <p className="text-[10px] text-gray-600 tracking-[0.3em] uppercase mb-4">Simulate Clearance</p>
-                <button 
-                  onClick={handleAdminApprove}
-                  disabled={requestStatus === 'approving'}
-                  className="w-full bg-green-900/20 hover:bg-green-900/40 border border-green-500/20 text-green-400 py-4 text-xs tracking-[0.2em] uppercase rounded-sm transition-all flex justify-center items-center space-x-2"
-                >
-                  {requestStatus === 'approving' ? (
-                    <span className="animate-pulse">Generating Asset...</span>
-                  ) : (
-                    <>
-                      <CheckCircle size={14} />
-                      <span>Approve Credentials</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
           ) : (
-            /* --- THE 3D VIP TICKET VIEW --- */
+            /* --- THE 3D TICKET VIEW --- */
             <div className="w-full flex flex-col items-center animate-fade-in-up mt-[-40px]">
               
               <p className="text-xs text-green-400 tracking-[0.3em] uppercase mb-12 animate-pulse drop-shadow-md">Credentials Verified</p>
@@ -546,7 +509,7 @@ export default function App() {
                         <div>
                           <div className="flex items-center space-x-2 text-yellow-500 mb-6 border border-yellow-500/30 px-3 py-1 inline-flex rounded-sm">
                             <Sparkles size={12} />
-                            <span className="text-[10px] font-bold tracking-[0.4em] uppercase">VIP All Access</span>
+                            <span className="text-[10px] font-bold tracking-[0.4em] uppercase">Theatre Access</span>
                           </div>
                           
                           <h2 className="text-xs md:text-sm uppercase tracking-[0.5em] text-gray-400 mb-4" style={{ fontFamily: "'Montserrat', sans-serif" }}>
@@ -618,7 +581,7 @@ export default function App() {
                       <div className="flex justify-between items-end mb-8">
                         <div>
                           <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] mb-1">Section</p>
-                          <p className="text-xl font-light text-[#D4AF37] tracking-wider">VIP</p>
+                          <p className="text-xl font-light text-[#D4AF37] tracking-wider">Theatre</p>
                         </div>
                         <div className="text-right">
                           <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] mb-1">Pass No.</p>
@@ -650,7 +613,7 @@ export default function App() {
                   className="bg-white text-black font-bold uppercase tracking-[0.2em] px-8 py-4 rounded-md hover:bg-yellow-500 transition-colors flex items-center space-x-2 shadow-[0_0_20px_rgba(255,255,255,0.2)] w-full md:w-auto justify-center"
                 >
                   <Download size={18} />
-                  <span>Download for WhatsApp</span>
+                  <span>Download PDF ticket</span>
                 </button>
                 <button 
                   onClick={handleReset} 
