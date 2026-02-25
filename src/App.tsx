@@ -68,7 +68,7 @@ export default function App() {
 
     try {
       // ⚠️ YOUR GOOGLE SCRIPT URL GOES HERE WHEN READY:
-      const GOOGLE_API_URL = "YOUR_GOOGLE_SCRIPT_URL_HERE";
+      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwujw7dn8KM-A633_gugteQvUWB3Rb9JcV4M83qRbx-qCDcd54CTFHlEVs441Maw0Y/exec";
 
       if (GOOGLE_API_URL !== "YOUR_GOOGLE_SCRIPT_URL_HERE") {
         await fetch(GOOGLE_API_URL, {
