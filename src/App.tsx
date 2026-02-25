@@ -696,15 +696,39 @@ export default function App() {
         .animate-twinkle-star { animation: twinkle-star 3s ease-in-out infinite; }
         
         @media print {
-          body { background: white !important; color: black !important; }
-          #digital-ticket { 
-            box-shadow: none !important; 
-            border: 1px solid #ccc !important; 
-            transform: none !important;
-            background: #fff !important;
+          @page { size: landscape; margin: 0; }
+          
+          html, body { 
+            background: #150103 !important; 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
           }
-          #digital-ticket * { color: black !important; text-shadow: none !important; }
-          .print-hide, .fixed { display: none !important; }
+          
+          /* Hide everything by default */
+          body * { 
+            visibility: hidden; 
+          }
+          
+          /* Show ONLY the digital ticket and its children */
+          #digital-ticket, #digital-ticket * { 
+            visibility: visible; 
+          }
+          
+          /* Position the ticket perfectly on the page */
+          #digital-ticket { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            transform: none !important; /* Disables the 3D mouse tilt */
+            box-shadow: none !important;
+            border: none !important;
+            margin: 20px !important;
+          }
+          
+          /* Hide the interactive holographic mouse glare */
+          .mix-blend-screen { 
+            display: none !important; 
+          }
         }
       `}} />
     </div>
