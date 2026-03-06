@@ -5,12 +5,25 @@ import { Calendar, Clock, MapPin, Ticket, Download, CheckCircle, ChevronRight, M
 const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
 
 export default function App() {
-  const MAX_TICKETS = 372;
   const TICKET_PRICE = 40;
   
+  // --- Core Dynamic States ---
+  const [maxTickets, setMaxTickets] = useState(() => {
+    const saved = localStorage.getItem('dinali_max_tickets');
+    return saved !== null ? parseInt(saved, 10) : 372;
+  });
+
   const [ticketsSold, setTicketsSold] = useState(() => {
     const saved = localStorage.getItem('dinali_tickets_sold');
     return saved !== null ? parseInt(saved, 10) : 145;
+  });
+
+  const [nextSequenceNumber, setNextSequenceNumber] = useState(() => {
+    const saved = localStorage.getItem('dinali_sequence_num');
+    if (saved !== null) return parseInt(saved, 10);
+    // Fallback if migrating from old version
+    const savedSold = localStorage.getItem('dinali_tickets_sold');
+    return savedSold !== null ? parseInt(savedSold, 10) + 1 : 146;
   });
 
   // --- Organizer / Admin States ---
@@ -18,7 +31,8 @@ export default function App() {
   const [showAdminAuth, setShowAdminAuth] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [authError, setAuthError] = useState(false);
-  const [adminTicketType, setAdminTicketType] = useState('General'); // General or Invited
+  const [adminTicketType, setAdminTicketType] = useState('General'); // General or VIP
+  const [customStartNumber, setCustomStartNumber] = useState<string>(''); // For overriding sequences
 
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -44,8 +58,10 @@ export default function App() {
     document.body.appendChild(script);
 
     localStorage.setItem('dinali_tickets_sold', ticketsSold.toString());
+    localStorage.setItem('dinali_max_tickets', maxTickets.toString());
+    localStorage.setItem('dinali_sequence_num', nextSequenceNumber.toString());
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
-  }, [ticketsSold, ticketDatabase]);
+  }, [ticketsSold, maxTickets, nextSequenceNumber, ticketDatabase]);
 
   const handleAdminAuth = (e: any) => {
     e.preventDefault();
@@ -61,15 +77,21 @@ export default function App() {
 
   const handleGenerateTicket = async (e: any) => {
     e.preventDefault();
-    if (ticketsSold + quantity > MAX_TICKETS) return;
+    if (ticketsSold + quantity > maxTickets) return;
     if (!name && !isAdmin) return; 
+    
     const guestName = name || "VIP Guest";
     const type = isAdmin ? adminTicketType : "General";
 
     setRequestStatus('submitting');
     
-    const newTicketNumber = ticketsSold + quantity;
-    const formattedNumber = newTicketNumber.toString().padStart(3, '0');
+    // Calculate precise ticket numbering
+    const startNum = customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
+    const endNum = startNum + quantity - 1;
+    const ticketNumString = `${startNum}${quantity > 1 ? ` - ${endNum}` : ''}`;
+    
+    // Unique ID generation based on the ending sequence number
+    const formattedNumber = endNum.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const payload = {
@@ -77,7 +99,7 @@ export default function App() {
       email: email,
       quantity: quantity,
       ticketId: uniqueId,
-      ticketNumber: `${ticketsSold + 1}${quantity > 1 ? ` - ${newTicketNumber}` : ''}`,
+      ticketNumber: ticketNumString,
       totalPrice: quantity * TICKET_PRICE,
       ticketType: type
     };
@@ -99,32 +121,30 @@ export default function App() {
     } finally {
       // Generate the visual ticket regardless of network success
       setTimeout(() => {
-        generateFinalTicket(guestName, email, quantity, uniqueId, type);
+        generateFinalTicket(guestName, email, quantity, uniqueId, type, ticketNumString, endNum);
       }, 800);
     }
   };
 
-  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any = null, type: string = "General") => {
-    const newTicketNumber = ticketsSold + qty;
-    const formattedNumber = newTicketNumber.toString().padStart(3, '0');
-    const uniqueId = predefinedId || `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
+  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any, type: string, ticketNumString: string, endNum: number) => {
     const finalTicket = {
       name: guestName,
       email: guestEmail || 'No Email Provided',
       quantity: qty,
       totalPrice: qty * TICKET_PRICE,
-      number: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
-      id: uniqueId,
+      number: ticketNumString,
+      id: predefinedId,
       date: "Saturday 27th June 2026",
       time: "6.00pm",
       venue: "Pioneer Theatre, Castle Hill",
-      type: type, // Stores General or Invited
+      type: type, 
       timestamp: new Date().toLocaleString()
     };
 
     setUserTicket(finalTicket);
-    setTicketsSold(newTicketNumber);
+    setTicketsSold(prev => prev + qty);
+    setNextSequenceNumber(endNum + 1);
+    setCustomStartNumber(''); // Reset override after use
     setTicketDatabase([finalTicket, ...ticketDatabase]);
     setRequestStatus('approved');
   };
@@ -215,8 +235,8 @@ export default function App() {
     setTilt({ x: 0, y: 0, glareX: 50, glareY: 50, opacity: 0 });
   };
 
-  const ticketsRemaining = MAX_TICKETS - ticketsSold;
-  const progressPercentage = (ticketsSold / MAX_TICKETS) * 100;
+  const ticketsRemaining = maxTickets - ticketsSold;
+  const progressPercentage = (ticketsSold / maxTickets) * 100;
 
   return (
     <div className="min-h-screen bg-[#150103] text-white relative overflow-x-hidden font-sans selection:bg-yellow-500/30">
@@ -368,7 +388,7 @@ export default function App() {
           
           {isAdmin && !userTicket ? (
             /* --- ORGANIZER DASHBOARD --- */
-            <div className="w-full max-w-4xl relative group animate-fade-in print-hide">
+            <div className="w-full max-w-5xl relative group animate-fade-in print-hide">
               <div className="absolute -inset-1 bg-gradient-to-r from-green-600/20 to-emerald-900/40 rounded-3xl blur-xl opacity-50"></div>
               
               <div className="relative w-full bg-[#0a120a]/90 border border-green-900/40 backdrop-blur-2xl rounded-3xl p-8 md:p-10 shadow-2xl">
@@ -391,7 +411,7 @@ export default function App() {
                     <Ticket className="text-green-500" size={32} />
                     <div>
                       <p className="text-xs text-gray-500 uppercase tracking-widest">Tickets Sold</p>
-                      <p className="text-2xl font-light text-white">{ticketsSold} <span className="text-sm text-gray-600">/ {MAX_TICKETS}</span></p>
+                      <p className="text-2xl font-light text-white">{ticketsSold} <span className="text-sm text-gray-600">/ {maxTickets}</span></p>
                     </div>
                   </div>
                   <div className="bg-black/40 border border-green-900/30 p-6 rounded-2xl flex items-center space-x-4">
@@ -412,52 +432,54 @@ export default function App() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                   {/* Direct Generation Form */}
-                  <div className="lg:col-span-1 bg-black/40 border border-green-900/20 p-6 rounded-2xl">
-                    <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6">Direct Ticket Generator</h3>
-                    <p className="text-xs text-gray-400 mb-6">Generate tickets instantly. An email will be dispatched with the ticket.</p>
-                    
-                    <form onSubmit={handleGenerateTicket} className="space-y-4">
-                      <input 
-                        type="text" 
-                        value={name}
-                        onChange={(e: any) => setName(e.target.value)}
-                        className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
-                        placeholder="Guest Name (e.g. Smith Family)"
-                      />
-                      <input 
-                        type="email" 
-                        value={email}
-                        onChange={(e: any) => setEmail(e.target.value)}
-                        className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
-                        placeholder="Email (Optional)"
-                      />
-                      <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
-                        <span className="text-gray-400 text-sm px-2">Ticket Type</span>
-                        <select
-                          value={adminTicketType}
-                          onChange={(e: any) => setAdminTicketType(e.target.value)}
-                          className="bg-transparent text-white focus:outline-none text-right"
-                        >
-                          <option value="General" className="bg-black">General</option>
-                          <option value="Invited" className="bg-black">Invited</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
-                        <span className="text-gray-400 text-sm px-2">Total Passes</span>
-                        <select
-                          value={quantity}
-                          onChange={(e: any) => setQuantity(parseInt(e.target.value, 10))}
-                          className="bg-transparent text-white focus:outline-none text-right"
-                        >
-                          {[...Array(20)].map((_: any, i: any) => (
-                            <option key={i + 1} value={i + 1} className="bg-black">{i + 1}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button type="submit" disabled={requestStatus === 'submitting'} className="w-full bg-green-600 hover:bg-green-500 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors disabled:opacity-50">
-                        {requestStatus === 'submitting' ? 'Generating...' : 'Generate & Open Ticket'}
-                      </button>
-                    </form>
+                  <div className="lg:col-span-1 bg-black/40 border border-green-900/20 p-6 rounded-2xl flex flex-col h-full">
+                    <div>
+                      <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6">Direct Ticket Generator</h3>
+                      <p className="text-xs text-gray-400 mb-6">Generate tickets instantly. An email will be dispatched with the ticket.</p>
+                      
+                      <form onSubmit={handleGenerateTicket} className="space-y-4">
+                        <input 
+                          type="text" 
+                          value={name}
+                          onChange={(e: any) => setName(e.target.value)}
+                          className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
+                          placeholder="Guest Name (e.g. Smith Family)"
+                        />
+                        <input 
+                          type="email" 
+                          value={email}
+                          onChange={(e: any) => setEmail(e.target.value)}
+                          className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
+                          placeholder="Email (Optional)"
+                        />
+                        <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
+                          <span className="text-gray-400 text-sm px-2">Ticket Type</span>
+                          <select
+                            value={adminTicketType}
+                            onChange={(e: any) => setAdminTicketType(e.target.value)}
+                            className="bg-transparent text-white focus:outline-none text-right"
+                          >
+                            <option value="General" className="bg-black">General</option>
+                            <option value="VIP" className="bg-black">VIP</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
+                          <span className="text-gray-400 text-sm px-2">Total Passes</span>
+                          <select
+                            value={quantity}
+                            onChange={(e: any) => setQuantity(parseInt(e.target.value, 10))}
+                            className="bg-transparent text-white focus:outline-none text-right"
+                          >
+                            {[...Array(20)].map((_: any, i: any) => (
+                              <option key={i + 1} value={i + 1} className="bg-black">{i + 1}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button type="submit" disabled={requestStatus === 'submitting'} className="w-full bg-green-600 hover:bg-green-500 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors disabled:opacity-50">
+                          {requestStatus === 'submitting' ? 'Generating...' : 'Generate & Open Ticket'}
+                        </button>
+                      </form>
+                    </div>
                   </div>
 
                   {/* Database List */}
@@ -486,7 +508,7 @@ export default function App() {
                                   <td className="p-4 text-white">{ticket.name}</td>
                                   <td className="p-4 text-white">{ticket.type || 'General'}</td>
                                   <td className="p-4 text-gray-400">{ticket.quantity}</td>
-                                  <td className="p-4 text-gray-500 font-mono">{ticket.id.split('-')[2]}</td>
+                                  <td className="p-4 text-gray-500 font-mono">{ticket.number}</td>
                                   <td className="p-4 text-right">
                                     <button 
                                       onClick={() => viewExistingTicket(ticket)}
@@ -503,6 +525,43 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  {/* --- NEW: Advanced System Controls --- */}
+                  <div className="lg:col-span-3 bg-black/40 border border-green-900/20 p-6 rounded-2xl">
+                    <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6 flex items-center gap-2">
+                      <Lock size={16} /> System Controls
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Ticket Number Sequence</label>
+                        <div className="flex items-center">
+                          <input
+                            type="number"
+                            value={customStartNumber}
+                            onChange={(e: any) => setCustomStartNumber(e.target.value)}
+                            placeholder={`Default next: ${nextSequenceNumber}`}
+                            className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Leave blank to auto-increment. Overriding this changes the assigned ticket number (e.g., jump to 900 for VIPs) <strong>without</strong> messing up your "Tickets Sold" count.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Maximum Venue Capacity</label>
+                        <input
+                          type="number"
+                          value={maxTickets}
+                          onChange={(e: any) => setMaxTickets(parseInt(e.target.value, 10) || 0)}
+                          className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Currently caps public sales at {maxTickets} total passes.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>
