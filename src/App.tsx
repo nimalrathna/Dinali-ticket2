@@ -26,6 +26,7 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<boolean>(false);
   const [adminTicketType, setAdminTicketType] = useState<string>('General');
+  const [confirmReset, setConfirmReset] = useState<boolean>(false); // Re-added missing state
   
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -327,6 +328,20 @@ export default function App() {
   const handleAdminAuth = (e: any) => {
     e.preventDefault();
     if (adminPassword === 'Dinali1984') { setIsAdmin(true); setShowAdminAuth(false); setAdminPassword(''); } else { setAuthError(true); }
+  };
+
+  // Re-added Missing Factory Reset logic
+  const handleFactoryReset = () => {
+    setTicketsSold(0);
+    setNextOrderId(1);
+    setNextSequenceNumber(146);
+    setTicketDatabase([]);
+    setConfirmReset(false);
+    localStorage.removeItem('dinali_ticket_database');
+    localStorage.removeItem('dinali_tickets_sold');
+    localStorage.removeItem('dinali_max_tickets');
+    localStorage.removeItem('dinali_next_order_id');
+    localStorage.removeItem('dinali_sequence_num');
   };
 
   const handleMouseMove = (e: any) => {
