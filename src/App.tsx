@@ -23,12 +23,27 @@ export default function App() {
     return saved !== null ? parseInt(saved, 10) : 145;
   });
 
+  // --- Sequential Order ID State ---
+  const [nextOrderId, setNextOrderId] = useState<number>(() => {
+    const saved = localStorage.getItem('dinali_next_order_id');
+    return saved !== null ? parseInt(saved, 10) : 1;
+  });
+
+  // --- Sequential Ticket ID State ---
+  const [nextSequenceNumber, setNextSequenceNumber] = useState<number>(() => {
+    const saved = localStorage.getItem('dinali_sequence_num');
+    if (saved !== null) return parseInt(saved, 10);
+    const savedSold = localStorage.getItem('dinali_tickets_sold');
+    return savedSold !== null ? parseInt(savedSold, 10) + 1 : 146;
+  });
+
   // --- Organizer / Admin States ---
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [showAdminAuth, setShowAdminAuth] = useState<boolean>(false);
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<boolean>(false);
   const [confirmReset, setConfirmReset] = useState<boolean>(false);
+  const [adminTicketType, setAdminTicketType] = useState<string>('General');
 
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -39,6 +54,8 @@ export default function App() {
   const [email, setEmail] = useState<string>('');
   const [mobile, setMobile] = useState<string>(''); 
   const [quantity, setQuantity] = useState<number>(1);
+  const [customOrderId, setCustomOrderId] = useState<string>(''); // For overriding the sequence
+  const [customStartNumber, setCustomStartNumber] = useState<string>(''); // For overriding ticket sequences
   const [requestStatus, setRequestStatus] = useState<string>('idle');
   const [resendingId, setResendingId] = useState<string | null>(null);
   
@@ -52,30 +69,39 @@ export default function App() {
     localStorage.setItem('dinali_tickets_sold', ticketsSold.toString());
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
     localStorage.setItem('dinali_max_tickets', maxTickets.toString());
-  }, [ticketsSold, ticketDatabase, maxTickets]);
+    localStorage.setItem('dinali_next_order_id', nextOrderId.toString());
+    localStorage.setItem('dinali_sequence_num', nextSequenceNumber.toString());
+  }, [ticketsSold, ticketDatabase, maxTickets, nextOrderId, nextSequenceNumber]);
 
   const handleGenerateTicket = async (e: any) => {
     e.preventDefault();
     if (ticketsSold + quantity > maxTickets) return;
     if (!name && !isAdmin) return; 
     const guestName = name || "VIP Guest";
+    const type = isAdmin ? adminTicketType : "General";
 
     if (isAdmin) {
       // Direct instant generation for admins
       setRequestStatus('approving');
-      await processTicketAndSendToBackend(guestName, email, mobile, quantity);
+      await processTicketAndSendToBackend(guestName, email, mobile, quantity, type);
     } else {
       // Public flow
       setRequestStatus('submitting');
-      await processTicketAndSendToBackend(guestName, email, mobile, quantity);
+      await processTicketAndSendToBackend(guestName, email, mobile, quantity, type);
     }
   };
 
-  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, guestMobile: string, qty: number) => {
-    const newTicketNumber = ticketsSold + qty;
-    const formattedNumber = newTicketNumber.toString().padStart(3, '0');
+  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, guestMobile: string, qty: number, type: string) => {
+    const startNum = customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
+    const endNum = startNum + qty - 1;
+    const ticketNumString = `${startNum}${qty > 1 ? ` - ${endNum}` : ''}`;
+    
+    const formattedNumber = endNum.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    const purchaseId = `ORD-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    
+    // Use custom sequence if provided by admin, otherwise use the auto-incrementing ID
+    const currentOrderId = customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
+    const purchaseId = currentOrderId.toString();
 
     const payload = {
       action: "generate",
@@ -86,8 +112,9 @@ export default function App() {
       mobile: guestMobile, 
       quantity: qty,
       ticketId: uniqueId,
-      ticketNumber: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
-      totalPrice: qty * TICKET_PRICE
+      ticketNumber: ticketNumString,
+      totalPrice: qty * TICKET_PRICE,
+      ticketType: type
     };
 
     try {
@@ -109,15 +136,13 @@ export default function App() {
     } finally {
       // Generate UI Ticket after small delay so the user isn't blocked by slow networks
       setTimeout(() => {
-        generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId);
+        generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, currentOrderId, type, ticketNumString, endNum);
       }, 800);
     }
   };
 
-  const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, qty: number, predefinedId: any = null, purchaseId: string = "N/A") => {
-    const newTicketNumber = ticketsSold + qty;
-    const formattedNumber = newTicketNumber.toString().padStart(3, '0');
-    const uniqueId = predefinedId || `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, qty: number, predefinedId: any = null, purchaseId: string = "N/A", currentOrderId: number = nextOrderId, type: string = "General", ticketNumString: string = "", endNum: number = nextSequenceNumber) => {
+    const uniqueId = predefinedId || `DINALI-26-${endNum.toString().padStart(3, '0')}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const finalTicket = {
       purchaseId: purchaseId,
@@ -126,16 +151,21 @@ export default function App() {
       mobile: guestMobile || 'No Mobile Provided',
       quantity: qty,
       totalPrice: qty * TICKET_PRICE,
-      number: `${ticketsSold + 1}${qty > 1 ? ` - ${newTicketNumber}` : ''}`,
+      number: ticketNumString || `${ticketsSold + 1}${qty > 1 ? ` - ${ticketsSold + qty}` : ''}`,
       id: uniqueId,
       date: "Saturday 27th June 2026",
       time: "6.00pm",
       venue: "Pioneer Theatre, Castle Hill",
+      type: type,
       timestamp: new Date().toLocaleString()
     };
 
     setUserTicket(finalTicket);
-    setTicketsSold(newTicketNumber);
+    setTicketsSold(prev => prev + qty);
+    setNextSequenceNumber(endNum + 1);
+    setNextOrderId(currentOrderId + 1); // Increment for the next order
+    setCustomOrderId(''); // Reset the override field
+    setCustomStartNumber(''); // Reset the sequence override field
     setTicketDatabase([finalTicket, ...ticketDatabase]);
     setRequestStatus('approved');
   };
@@ -209,6 +239,8 @@ export default function App() {
   const handleFactoryReset = () => {
     if (confirmReset) {
       setTicketsSold(0);
+      setNextOrderId(1); // Reset Order ID too!
+      setNextSequenceNumber(146); // Reset Sequence
       setTicketDatabase([]);
       setConfirmReset(false);
     } else {
@@ -388,12 +420,6 @@ export default function App() {
                   </div>
                   <div className="flex items-center space-x-3">
                     <button 
-                      onClick={handleFactoryReset} 
-                      className={`text-[10px] uppercase font-bold tracking-widest border px-4 py-2.5 rounded-full transition-all ${confirmReset ? 'bg-red-900/80 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-red-500/80 border-red-900/30 hover:text-red-400 hover:border-red-500/50 bg-black/40'}`}
-                    >
-                      {confirmReset ? "Confirm Reset?" : "Reset Data"}
-                    </button>
-                    <button 
                       onClick={() => setIsAdmin(false)} 
                       className="text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-white border border-gray-600 hover:border-white bg-black/40 px-4 py-2.5 rounded-full transition-all"
                     >
@@ -466,6 +492,19 @@ export default function App() {
                         className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
                         placeholder="Mobile Number (Optional)"
                       />
+                      
+                      <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
+                        <span className="text-gray-400 text-sm px-2">Ticket Type</span>
+                        <select
+                          value={adminTicketType}
+                          onChange={(e: any) => setAdminTicketType(e.target.value)}
+                          className="bg-transparent text-white focus:outline-none text-right"
+                        >
+                          <option value="General" className="bg-black">General</option>
+                          <option value="VIP" className="bg-black">VIP</option>
+                        </select>
+                      </div>
+
                       <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
                         <span className="text-gray-400 text-sm px-2">Total Passes</span>
                         <select
@@ -478,6 +517,7 @@ export default function App() {
                           ))}
                         </select>
                       </div>
+
                       <button type="submit" disabled={requestStatus === 'approving'} className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors">
                         {requestStatus === 'approving' ? 'Generating...' : 'Generate & Open Ticket'}
                       </button>
@@ -540,6 +580,84 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  {/* --- Advanced System Controls --- */}
+                  <div className="lg:col-span-3 bg-black/40 border border-green-900/20 p-6 rounded-2xl mt-4">
+                    <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6 flex items-center gap-2">
+                      <Lock size={16} /> System Controls
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Ticket No.</label>
+                        <div className="flex items-center">
+                          <input
+                            type="number"
+                            value={customStartNumber}
+                            onChange={(e: any) => setCustomStartNumber(e.target.value)}
+                            placeholder={`Default next: ${nextSequenceNumber}`}
+                            className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Leave blank to auto-increment.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Order ID</label>
+                        <div className="flex items-center">
+                          <input
+                            type="number"
+                            value={customOrderId}
+                            onChange={(e: any) => setCustomOrderId(e.target.value)}
+                            placeholder={`Default next: ${nextOrderId}`}
+                            className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Sequential order number (1, 2, 3...).
+                        </p>
+                      </div>
+                      
+                      {/* Override Tickets Sold */}
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Tickets Sold</label>
+                        <input
+                          type="number"
+                          value={ticketsSold}
+                          onChange={(e: any) => setTicketsSold(parseInt(e.target.value, 10) || 0)}
+                          className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Reset or adjust the sold counter manually.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Maximum Venue Capacity</label>
+                        <input
+                          type="number"
+                          value={maxTickets}
+                          onChange={(e: any) => setMaxTickets(parseInt(e.target.value, 10) || 0)}
+                          className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Caps public sales at {maxTickets} total passes.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* MOVED RESET BUTTON */}
+                    <div className="mt-8 pt-6 border-t border-green-900/30 flex justify-end">
+                      <button 
+                        onClick={handleFactoryReset} 
+                        className={`text-xs uppercase font-bold tracking-widest border px-6 py-3 rounded-lg transition-all flex items-center gap-2 ${confirmReset ? 'bg-red-900/80 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-red-500/80 border-red-900/30 hover:text-red-400 hover:border-red-500/50 bg-black/40'}`}
+                      >
+                        {confirmReset ? "Are you sure? Click to Confirm" : "Factory Reset Local Data"}
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -757,7 +875,7 @@ export default function App() {
                       <div className="flex justify-between items-end mb-8">
                         <div>
                           <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] mb-1">Section</p>
-                          <p className="text-xl font-light text-[#D4AF37] tracking-wider">Theatre</p>
+                          <p className="text-xl font-light text-[#D4AF37] tracking-wider">{userTicket.type || 'General'}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] mb-1">Pass No.</p>
