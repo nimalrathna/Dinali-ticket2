@@ -74,18 +74,17 @@ export default function App() {
     };
 
     try {
-      // ⚠️ PASTE YOUR GOOGLE WEB APP URL HERE:
+      // Your live Google Apps Script URL
       const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbx_uoB92jfRGgu7lbCr9Gv54e6DntJxUbeInwmXr3GJMrY5vBUyLlav1eUUQTi53OTA/exec";
 
-      if (GOOGLE_API_URL !== "YOUR_GOOGLE_SCRIPT_URL_HERE") {
-        await fetch(GOOGLE_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "text/plain;charset=utf-8",
-          },
-          body: JSON.stringify(payload)
-        });
-      }
+      // Send the data directly to Google Sheets
+      await fetch(GOOGLE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify(payload)
+      });
 
       setTimeout(() => {
         generateFinalTicket(name, email, quantity, uniqueId);
