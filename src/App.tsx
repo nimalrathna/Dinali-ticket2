@@ -80,25 +80,19 @@ export default function App() {
     localStorage.setItem('dinali_sequence_num', nextSequenceNumber.toString());
   }, [ticketsSold, ticketDatabase, maxTickets, nextOrderId, nextSequenceNumber]);
 
-  const handleGenerateTicket = async (e: any) => {
+  const handleGenerateTicket = (e: any) => {
     e.preventDefault();
     if (ticketsSold + quantity > maxTickets) return;
     if (!name && !isAdmin) return; 
     const guestName = name || "VIP Guest";
     const type = isAdmin ? adminTicketType : "General";
 
-    if (isAdmin) {
-      // Direct instant generation for admins
-      setRequestStatus('approving');
-      await processTicketAndSendToBackend(guestName, email, mobile, quantity, type);
-    } else {
-      // Public flow
-      setRequestStatus('submitting');
-      await processTicketAndSendToBackend(guestName, email, mobile, quantity, type);
-    }
+    setRequestStatus(isAdmin ? 'approving' : 'submitting');
+    processTicketAndSendToBackend(guestName, email, mobile, quantity, type);
   };
 
-  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, guestMobile: string, qty: number, type: string) => {
+  // Removed async/await to ensure the UI doesn't hang waiting for Google's servers
+  const processTicketAndSendToBackend = (guestName: string, guestEmail: string, guestMobile: string, qty: number, type: string) => {
     const startNum = customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
     const endNum = startNum + qty - 1;
     const ticketNumString = `${startNum}${qty > 1 ? ` - ${endNum}` : ''}`;
@@ -124,28 +118,22 @@ export default function App() {
       ticketType: type
     };
 
-    try {
-      // Your live Google Apps Script URL
-      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbzHHX3n418Sah0RBIPTqMp0uoasiC_wYozXSFa8k9Sb7VK4og99B_oT86MIVNwnq4mX/exec";
+    // Your live Google Apps Script URL
+    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwXt3wR8n_VHpEVPj5IChr8fSnwNSD-CTtcif4vbwvyX6twT8UCFPVr79vj61Vx2uM/exec";
 
-      // Send the data to Google Sheets
-      // Using text/plain bypasses the browser's strict CORS preflight check for faster processing
-      await fetch(GOOGLE_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify(payload)
-      });
-      
-    } catch (error) {
-      console.error("Failed to connect to backend:", error);
-    } finally {
-      // Generate UI Ticket after small delay so the user isn't blocked by slow networks
-      setTimeout(() => {
-        generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, currentOrderId, type, ticketNumString, endNum);
-      }, 800);
-    }
+    // Fire and forget the network request so the user isn't stuck waiting
+    fetch(GOOGLE_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify(payload)
+    }).catch(error => console.error("Failed to connect to backend:", error));
+    
+    // Instantly generate UI Ticket after a tiny UX delay
+    setTimeout(() => {
+      generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, currentOrderId, type, ticketNumString, endNum);
+    }, 800);
   };
 
   const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, qty: number, predefinedId: any = null, purchaseId: string = "N/A", currentOrderId: number = nextOrderId, type: string = "General", ticketNumString: string = "", endNum: number = nextSequenceNumber) => {
@@ -224,15 +212,25 @@ export default function App() {
     setIsDownloading(true);
     const element = ticketRef.current as any;
 
-    // Temporarily remove the 3D mouse transform to get a flat, perfect screenshot
+    // 1. Temporarily remove the 3D mouse transform to get a flat screenshot
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
-    // FIX FOR BLANK LETTERS: html2canvas struggles with transparent gradients
-    // We swap it to solid gold just for the screenshot, then swap back!
+    // 2. Hide the cinematic glare completely (Fixes the "Yellow Box" issue)
+    const glareOverlay = element.querySelector('.mix-blend-screen');
+    if (glareOverlay) glareOverlay.style.display = 'none';
+
+    // 3. FIX FOR BLANK LETTERS: Remove transparent background-clip gradients
     const goldTextElements = element.querySelectorAll('.text-3d-gold');
     goldTextElements.forEach((el: any) => {
-      el.classList.remove('text-3d-gold');
+      // Store original class to restore later
+      el.dataset.originalClass = el.className;
+      el.className = el.className.replace('text-3d-gold', '');
+      // Strip gradient styling that breaks html2canvas
+      el.style.backgroundImage = 'none';
+      el.style.webkitBackgroundClip = 'initial';
+      el.style.webkitTextFillColor = 'initial';
+      // Apply solid gold color
       el.style.color = '#D4AF37';
       el.style.textShadow = '0px 2px 4px rgba(0,0,0,0.8)';
     });
@@ -245,14 +243,6 @@ export default function App() {
         logging: false
       });
 
-      // Restore all visual styles
-      element.style.transform = originalTransform;
-      goldTextElements.forEach((el: any) => {
-        el.classList.add('text-3d-gold');
-        el.style.color = '';
-        el.style.textShadow = '';
-      });
-
       // Convert canvas to a downloadable image
       const image = canvas.toDataURL("image/png");
       const link = document.createElement('a');
@@ -261,9 +251,21 @@ export default function App() {
       link.click();
     } catch (err) {
       console.error("Failed to generate image:", err);
-      element.style.transform = originalTransform;
       alert("Something went wrong generating the image. Please try again.");
     } finally {
+      // Restore all original visual styles perfectly
+      element.style.transform = originalTransform;
+      if (glareOverlay) glareOverlay.style.display = '';
+      
+      goldTextElements.forEach((el: any) => {
+        el.className = el.dataset.originalClass;
+        el.style.backgroundImage = '';
+        el.style.webkitBackgroundClip = '';
+        el.style.webkitTextFillColor = '';
+        el.style.color = '';
+        el.style.textShadow = '';
+      });
+      
       setIsDownloading(false);
     }
   };
@@ -868,7 +870,7 @@ export default function App() {
                             A Musical Journey
                           </h2>
                           <h1 
-                            className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] via-[#FFF8DC] to-[#D4AF37] mb-1"
+                            className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] via-[#FFF8DC] to-[#D4AF37] mb-1 text-3d-gold"
                             style={{ fontFamily: "'Abhaya Libre', serif" }}
                           >
                             ස්වරාංග
