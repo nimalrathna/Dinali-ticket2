@@ -15,7 +15,8 @@ export default function App() {
 
   // --- Organizer / Admin States ---
   const [isAdmin, setIsAdmin] = useState(false);
-  const [ticketDatabase, setTicketDatabase] = useState(() => {
+  // FIX: Explicitly tell TypeScript this is an array of 'any' objects
+  const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
     return saved !== null ? JSON.parse(saved) : [];
   });
@@ -26,7 +27,8 @@ export default function App() {
   const [requestStatus, setRequestStatus] = useState('idle');
   const [isDownloading, setIsDownloading] = useState(false); // NEW: Download state
   
-  const [userTicket, setUserTicket] = useState(null);
+  // FIX: Explicitly tell TypeScript this can hold 'any' type, not just 'null'
+  const [userTicket, setUserTicket] = useState<any>(null);
 
   // --- 3D Ticket Interactive States ---
   const ticketRef = useRef(null);
@@ -137,17 +139,17 @@ export default function App() {
 
   // --- NEW: Download as High-Res Image Logic ---
   const downloadTicketAsImage = async () => {
-    if (!ticketRef.current || !window.html2canvas) return;
+    if (!ticketRef.current || !(window as any).html2canvas) return;
     
     setIsDownloading(true);
-    const element = ticketRef.current;
+    const element = ticketRef.current as any;
 
     // Temporarily remove the 3D mouse transform to get a flat, perfect screenshot
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
     try {
-      const canvas = await window.html2canvas(element, {
+      const canvas = await (window as any).html2canvas(element, {
         useCORS: true, // Allows capturing the external QR code
         scale: 2,      // Double resolution for crisp text
         backgroundColor: '#1a0205', // Ensures the dark background is preserved
@@ -175,7 +177,7 @@ export default function App() {
   // --- 3D Tilt Logic ---
   const handleMouseMove = (e: any) => {
     if (!ticketRef.current) return;
-    const rect = ticketRef.current.getBoundingClientRect();
+    const rect = (ticketRef.current as any).getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
@@ -400,7 +402,7 @@ export default function App() {
                           <tbody className="divide-y divide-green-900/20">
                             {ticketDatabase.length === 0 ? (
                               <tr>
-                                <td colSpan="4" className="p-8 text-center text-gray-500">No tickets generated yet.</td>
+                                <td colSpan={4} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
                               </tr>
                             ) : (
                               ticketDatabase.map((ticket: any, idx: any) => (
@@ -798,6 +800,18 @@ export default function App() {
         .animate-spotlight-sweep-reverse { animation: spotlight-sweep-reverse 12s ease-in-out infinite; }
         .animate-pulse-slow { animation: pulse-slow 5s ease-in-out infinite; }
         .animate-twinkle-star { animation: twinkle-star 3s ease-in-out infinite; }
+        
+        @media print {
+          body { background: white !important; color: black !important; }
+          #digital-ticket { 
+            box-shadow: none !important; 
+            border: 1px solid #ccc !important; 
+            transform: none !important;
+            background: #fff !important;
+          }
+          #digital-ticket * { color: black !important; text-shadow: none !important; }
+          .print-hide, .fixed { display: none !important; }
+        }
       `}} />
     </div>
   );
