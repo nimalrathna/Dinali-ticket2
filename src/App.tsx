@@ -251,9 +251,11 @@ export default function App() {
         const file = new File([blob], fileName, { type: 'image/png' });
         
         // Use Native Share API for mobile devices (iOS/Android) to allow saving directly to Photos
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // Bypass TS error by casting navigator to any for the canShare and share methods
+        const nav = navigator as any;
+        if (nav.canShare && nav.canShare({ files: [file] })) {
           try {
-            await navigator.share({
+            await nav.share({
               files: [file],
               title: 'Swaranga Ticket',
               text: 'Here is my ticket for the Swaranga concert!'
