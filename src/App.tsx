@@ -124,7 +124,7 @@ export default function App() {
 
     try {
       // Your live Google Apps Script URL
-      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyzDFC_TsSris7Tkz_tnmSeuMr8WLMU5LDnj8ig92tQjFW6UDvokM_qXNTKB08D6rtp/exec";
+      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyAzKErRKxWpBoS-sSAumbZo8pgB_VAHCjmFt8OT61BHGXNnda6jmeVX85vfLssQXB1/exec";
 
       // Send the data directly to Google Sheets
       await fetch(GOOGLE_API_URL, {
