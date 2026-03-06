@@ -23,7 +23,7 @@ export default function App() {
     return saved !== null ? parseInt(saved, 10) : 145;
   });
 
-  // --- Sequential Tracking (Managed by Backend now, but kept for Admin overrides) ---
+  // --- Sequential Tracking ---
   const [nextOrderId, setNextOrderId] = useState<number>(() => {
     const saved = localStorage.getItem('dinali_next_order_id');
     return saved !== null ? parseInt(saved, 10) : 1;
@@ -91,37 +91,23 @@ export default function App() {
 
   // NEW: Robust ID Generation and Server-Side Validation
   const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, guestMobile: string, qty: number, type: string) => {
-    // If admin is generating, we can bypass wait and use their overrides
-    if (isAdmin) {
-      const startNum = customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
-      const endNum = startNum + qty - 1;
-      const ticketNumString = `${startNum}${qty > 1 ? ` - ${endNum}` : ''}`;
-      const currentOrderId = customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
-      
-      const payload = {
-        action: "generate",
-        purchaseId: currentOrderId.toString(),
-        source: "Admin",
-        name: guestName,
-        email: guestEmail,
-        mobile: guestMobile, 
-        quantity: qty,
-        ticketNumber: ticketNumString,
-        totalPrice: qty * TICKET_PRICE,
-        ticketType: type
-      };
+    // 1. Pre-generate IDs so we can send them to the sheet (fixing the "empty columns" bug)
+    const baseOrderId = isAdmin && customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
+    const baseTicketNo = isAdmin && customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
+    
+    const purchaseId = baseOrderId.toString();
+    const endNum = baseTicketNo + qty - 1;
+    const ticketNumString = `${baseTicketNo}${qty > 1 ? ` - ${endNum}` : ''}`;
+    const uniqueId = `DINALI-26-${baseTicketNo.toString().padStart(3, '0')}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwqCBJjOpRheYu9xuiMq4NORQNQtfTr9Wy3zglBMh4-onAVD9TEHWP_XzDg2pjN0IcS/exec";
-      fetch(GOOGLE_API_URL, { method: "POST", body: JSON.stringify(payload) });
+    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbzHHX3n418Sah0RBIPTqMp0uoasiC_wYozXSFa8k9Sb7VK4og99B_oT86MIVNwnq4mX/exec";
 
-      generateFinalTicket(guestName, guestEmail, guestMobile, qty, null, currentOrderId.toString(), currentOrderId, type, ticketNumString, endNum);
-      return;
-    }
-
-    // PUBLIC BOOKING: Wait for Google to assign the next available number (The authority)
     const payload = {
       action: "generate",
-      source: "Public",
+      purchaseId: purchaseId, // Fixes empty Order ID
+      ticketId: uniqueId,     // Fixes empty Ticket ID
+      ticketNumber: ticketNumString,
+      source: isAdmin ? "Admin" : "Public",
       name: guestName,
       email: guestEmail,
       mobile: guestMobile, 
@@ -130,8 +116,14 @@ export default function App() {
       ticketType: type
     };
 
-    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbzHHX3n418Sah0RBIPTqMp0uoasiC_wYozXSFa8k9Sb7VK4og99B_oT86MIVNwnq4mX/exec";
+    if (isAdmin) {
+      // Admin fires and forgets for speed
+      fetch(GOOGLE_API_URL, { method: "POST", body: JSON.stringify(payload) });
+      generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, baseOrderId, type, ticketNumString, endNum);
+      return;
+    }
 
+    // PUBLIC BOOKING: Wait for Google to confirm
     try {
       const response = await fetch(GOOGLE_API_URL, {
         method: "POST",
@@ -142,33 +134,30 @@ export default function App() {
       const result = await response.json();
       
       if (result.success) {
-        // Use the strictly sequential ID returned by the Google Script
+        // Use the strictly sequential ID returned by the Google Script if it provided one
         generateFinalTicket(
           guestName, 
           guestEmail, 
           guestMobile, 
           qty, 
-          result.uniqueId, 
-          result.orderId, 
-          parseInt(result.orderId, 10), 
+          result.uniqueId || uniqueId, 
+          result.orderId || purchaseId, 
+          parseInt(result.orderId || purchaseId, 10), 
           type, 
-          result.ticketNumber, 
-          0 // Not needed for public tracking as backend handled it
+          result.ticketNumber || ticketNumString, 
+          0 
         );
       } else {
-        throw new Error("Backend failed to assign ID");
+        throw new Error("Backend failed");
       }
     } catch (error) {
       console.error("Backend Error:", error);
-      // Failover: Generate randomized ID so they still get a ticket, but log error
-      const failId = Math.floor(10000 + Math.random() * 80000).toString();
-      generateFinalTicket(guestName, guestEmail, guestMobile, qty, null, failId, 0, type, `R-${failId}`, 0);
+      // Failover: still generate so customer isn't stuck
+      generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, baseOrderId, type, ticketNumString, endNum);
     }
   };
 
   const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, qty: number, predefinedId: any = null, purchaseId: string = "N/A", currentOrderId: number = nextOrderId, type: string = "General", ticketNumString: string = "", endNum: number = nextSequenceNumber) => {
-    const uniqueId = predefinedId || `DINALI-26-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
     const finalTicket = {
       purchaseId: purchaseId,
       name: guestName,
@@ -177,7 +166,7 @@ export default function App() {
       quantity: qty,
       totalPrice: qty * TICKET_PRICE,
       number: ticketNumString || `${ticketsSold + 1}${qty > 1 ? ` - ${ticketsSold + qty}` : ''}`,
-      id: uniqueId,
+      id: predefinedId || `DINALI-26-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
       date: "Saturday 27th June 2026",
       time: "6.00pm",
       venue: "Pioneer Theatre, Castle Hill",
@@ -188,11 +177,9 @@ export default function App() {
     setUserTicket(finalTicket);
     setTicketsSold(prev => prev + qty);
     
-    // Increment Admin-side sequence only if Admin made the change
-    if (isAdmin) {
-      setNextSequenceNumber(endNum + 1);
-      setNextOrderId(currentOrderId + 1);
-    }
+    // Increment local trackers only if we are using the local counters
+    if (endNum > 0) setNextSequenceNumber(endNum + 1);
+    if (currentOrderId > 0) setNextOrderId(currentOrderId + 1);
 
     setCustomOrderId(''); 
     setCustomStartNumber(''); 
@@ -225,7 +212,7 @@ export default function App() {
     }
   };
 
-  // --- Download as High-Res Image Logic (iPhone Photos Optimized) ---
+  // --- Download as High-Res Image Logic (Device Optimized) ---
   const downloadTicketAsImage = async () => {
     if (!ticketRef.current || !(window as any).html2canvas) return;
     
@@ -258,33 +245,33 @@ export default function App() {
       });
 
       const fileName = `Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
+      const dataUrl = canvas.toDataURL("image/png");
       const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
       
-      if (blob) {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        const nav = navigator as any;
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const nav = navigator as any;
 
-        // IPHONE OPTIMIZATION: Only share the file, no text. This triggers "Save Image" to Photos.
-        if (nav.canShare && nav.canShare({ files: [file] })) {
-          try {
-            await nav.share({
-              files: [file]
-              // Note: Intentionally left out 'title' and 'text' as they often force iOS to "Save to Files"
-            });
-          } catch (shareErr: any) {
-            if (shareErr.name !== 'AbortError') {
-              const link = document.createElement('a');
-              link.download = fileName;
-              link.href = canvas.toDataURL("image/png");
-              link.click();
-            }
+      if (isMobile && blob && nav.canShare && nav.canShare({ files: [new File([blob], fileName, { type: 'image/png' })] })) {
+        // MOBILE (iPhone/Android): Use Share API to ensure "Save Image" to Photos is available
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await nav.share({ files: [file] });
+        } catch (shareErr: any) {
+          if (shareErr.name !== 'AbortError') {
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = dataUrl;
+            link.click();
           }
-        } else {
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = canvas.toDataURL("image/png");
-          link.click();
         }
+      } else {
+        // DESKTOP (MacBook/Windows): Use direct download link (most reliable)
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
 
     } catch (err) {
@@ -619,7 +606,7 @@ export default function App() {
 
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Abhaya+Libre:wght@800&family=Montserrat:wght@200;300;400;500&family=Cinzel+Decorative:wght@400;700;900&display=swap');
-        .text-3d-gold { background-image: linear-gradient(to right, #D4AF37, #FFF8DC, #D4AF37, #FFF8DC, #D4AF37); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0px 1px 0px #5c3a02) drop-shadow(0px 2px 0px #422901) drop-shadow(0px 4px 15px rgba(212,175,55,0.4)); }
+        .text-3d-gold { background-image: linear-gradient(to right, #D4AF37, #FFF8DC, #D4AF37, #FFF8DC, #D4AF37); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0px 1px 0px #5c3a02) drop-shadow(0px 2px 0px #422901) drop-shadow(0px 3px 0px #2e1c00) drop-shadow(0px 4px 15px rgba(212,175,55,0.4)); }
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         @keyframes fade-in-up { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
