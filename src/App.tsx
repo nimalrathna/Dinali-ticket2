@@ -15,7 +15,11 @@ export default function App() {
 
   // --- Organizer / Admin States ---
   const [isAdmin, setIsAdmin] = useState(false);
-  // FIX: Explicitly tell TypeScript this is an array of 'any' objects
+  const [showAdminAuth, setShowAdminAuth] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [authError, setAuthError] = useState(false);
+  const [adminTicketType, setAdminTicketType] = useState('General'); // General or Invited
+
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
     return saved !== null ? JSON.parse(saved) : [];
@@ -25,16 +29,14 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [requestStatus, setRequestStatus] = useState('idle');
-  const [isDownloading, setIsDownloading] = useState(false); // NEW: Download state
+  const [isDownloading, setIsDownloading] = useState(false);
   
-  // FIX: Explicitly tell TypeScript this can hold 'any' type, not just 'null'
   const [userTicket, setUserTicket] = useState<any>(null);
 
   // --- 3D Ticket Interactive States ---
   const ticketRef = useRef(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50, opacity: 0 });
 
-  // Load html2canvas dynamically for the image export feature
   useEffect(() => {
     const script = document.createElement('script');
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
@@ -45,34 +47,39 @@ export default function App() {
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
   }, [ticketsSold, ticketDatabase]);
 
-  const handleGenerateTicket = (e: any) => {
+  const handleAdminAuth = (e: any) => {
+    e.preventDefault();
+    if (adminPassword === 'Dinali1984') {
+      setIsAdmin(true);
+      setShowAdminAuth(false);
+      setAdminPassword('');
+      setAuthError(false);
+    } else {
+      setAuthError(true);
+    }
+  };
+
+  const handleGenerateTicket = async (e: any) => {
     e.preventDefault();
     if (ticketsSold + quantity > MAX_TICKETS) return;
     if (!name && !isAdmin) return; 
     const guestName = name || "VIP Guest";
+    const type = isAdmin ? adminTicketType : "General";
 
-    if (isAdmin) {
-      generateFinalTicket(guestName, email, quantity);
-    } else {
-      setRequestStatus('submitting');
-      setTimeout(() => setRequestStatus('pending'), 1500);
-    }
-  };
-
-  const handleAdminApprove = async () => {
-    setRequestStatus('approving');
+    setRequestStatus('submitting');
     
     const newTicketNumber = ticketsSold + quantity;
     const formattedNumber = newTicketNumber.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const payload = {
-      name: name,
+      name: guestName,
       email: email,
       quantity: quantity,
       ticketId: uniqueId,
       ticketNumber: `${ticketsSold + 1}${quantity > 1 ? ` - ${newTicketNumber}` : ''}`,
-      totalPrice: quantity * TICKET_PRICE
+      totalPrice: quantity * TICKET_PRICE,
+      ticketType: type
     };
 
     try {
@@ -87,20 +94,17 @@ export default function App() {
         },
         body: JSON.stringify(payload)
       });
-
-      setTimeout(() => {
-        generateFinalTicket(name, email, quantity, uniqueId);
-      }, 800);
-      
     } catch (error) {
       console.error("Failed to connect to backend:", error);
+    } finally {
+      // Generate the visual ticket regardless of network success
       setTimeout(() => {
-        generateFinalTicket(name, email, quantity, uniqueId);
+        generateFinalTicket(guestName, email, quantity, uniqueId, type);
       }, 800);
     }
   };
 
-  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any = null) => {
+  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any = null, type: string = "General") => {
     const newTicketNumber = ticketsSold + qty;
     const formattedNumber = newTicketNumber.toString().padStart(3, '0');
     const uniqueId = predefinedId || `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -115,6 +119,7 @@ export default function App() {
       date: "Saturday 27th June 2026",
       time: "6.00pm",
       venue: "Pioneer Theatre, Castle Hill",
+      type: type, // Stores General or Invited
       timestamp: new Date().toLocaleString()
     };
 
@@ -137,7 +142,7 @@ export default function App() {
     setRequestStatus('approved');
   };
 
-  // --- NEW: Download as High-Res Image Logic ---
+  // --- Download as High-Res Image Logic ---
   const downloadTicketAsImage = async () => {
     if (!ticketRef.current || !(window as any).html2canvas) return;
     
@@ -148,16 +153,30 @@ export default function App() {
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
+    // FIX FOR BLANK LETTERS: html2canvas struggles with transparent gradients
+    // We swap it to solid gold just for the screenshot, then swap back!
+    const goldTextElements = element.querySelectorAll('.text-3d-gold');
+    goldTextElements.forEach((el: any) => {
+      el.classList.remove('text-3d-gold');
+      el.style.color = '#D4AF37';
+      el.style.textShadow = '0px 2px 4px rgba(0,0,0,0.8)';
+    });
+
     try {
       const canvas = await (window as any).html2canvas(element, {
-        useCORS: true, // Allows capturing the external QR code
-        scale: 2,      // Double resolution for crisp text
-        backgroundColor: '#1a0205', // Ensures the dark background is preserved
+        useCORS: true, 
+        scale: 2,      
+        backgroundColor: '#1a0205', 
         logging: false
       });
 
-      // Restore the 3D tilt functionality immediately after capture
+      // Restore all visual styles
       element.style.transform = originalTransform;
+      goldTextElements.forEach((el: any) => {
+        el.classList.add('text-3d-gold');
+        el.style.color = '';
+        el.style.textShadow = '';
+      });
 
       // Convert canvas to a downloadable image
       const image = canvas.toDataURL("image/png");
@@ -202,6 +221,51 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#150103] text-white relative overflow-x-hidden font-sans selection:bg-yellow-500/30">
       
+      {/* --- ADMIN AUTH MODAL --- */}
+      {showAdminAuth && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md print-hide p-4 animate-fade-in">
+          <div className="bg-[#0a0102] border border-red-900/50 p-8 rounded-2xl max-w-sm w-full shadow-[0_0_50px_rgba(212,175,55,0.1)] relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#D4AF37] via-[#FFF8DC] to-[#D4AF37] rounded-t-2xl"></div>
+            
+            <div className="flex items-center space-x-3 mb-6">
+              <Lock className="text-[#D4AF37]" size={24} />
+              <h3 className="text-xl text-white font-light tracking-widest uppercase">Admin Access</h3>
+            </div>
+            
+            <form onSubmit={handleAdminAuth}>
+              <div className="mb-6">
+                <input 
+                  type="password" 
+                  value={adminPassword}
+                  onChange={(e) => { setAdminPassword(e.target.value); setAuthError(false); }}
+                  className={`w-full bg-[#150103] border ${authError ? 'border-red-500' : 'border-red-900/50'} text-white p-4 rounded-lg focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                  placeholder="Enter Passcode"
+                  autoFocus
+                />
+                {authError && <p className="text-red-500 text-[10px] mt-2 uppercase tracking-widest absolute">Incorrect Passcode</p>}
+              </div>
+              
+              <div className="flex space-x-3">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowAdminAuth(false); setAdminPassword(''); setAuthError(false); }} 
+                  className="w-1/3 py-3 text-gray-400 border border-gray-800 rounded-lg uppercase text-xs font-bold tracking-widest hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="w-2/3 py-3 bg-gradient-to-r from-[#D4AF37] to-[#8B6508] text-black font-bold rounded-lg uppercase text-xs tracking-widest hover:brightness-110 transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>Unlock</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* --- CINEMATIC LIGHTING ENGINE --- */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 print-hide">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] h-[100vh] bg-[radial-gradient(circle_at_center,_rgba(80,10,20,0.6)_0%,_rgba(20,2,4,1)_80%)]"></div>
@@ -350,7 +414,7 @@ export default function App() {
                   {/* Direct Generation Form */}
                   <div className="lg:col-span-1 bg-black/40 border border-green-900/20 p-6 rounded-2xl">
                     <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6">Direct Ticket Generator</h3>
-                    <p className="text-xs text-gray-400 mb-6">Generate tickets instantly for your guest list without approval. You can download the generated ticket to send via WhatsApp.</p>
+                    <p className="text-xs text-gray-400 mb-6">Generate tickets instantly. An email will be dispatched with the ticket.</p>
                     
                     <form onSubmit={handleGenerateTicket} className="space-y-4">
                       <input 
@@ -368,6 +432,17 @@ export default function App() {
                         placeholder="Email (Optional)"
                       />
                       <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
+                        <span className="text-gray-400 text-sm px-2">Ticket Type</span>
+                        <select
+                          value={adminTicketType}
+                          onChange={(e: any) => setAdminTicketType(e.target.value)}
+                          className="bg-transparent text-white focus:outline-none text-right"
+                        >
+                          <option value="General" className="bg-black">General</option>
+                          <option value="Invited" className="bg-black">Invited</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-green-900/50 pb-2 pt-2">
                         <span className="text-gray-400 text-sm px-2">Total Passes</span>
                         <select
                           value={quantity}
@@ -379,8 +454,8 @@ export default function App() {
                           ))}
                         </select>
                       </div>
-                      <button type="submit" className="w-full bg-green-600 hover:bg-green-500 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors">
-                        Generate & Open Ticket
+                      <button type="submit" disabled={requestStatus === 'submitting'} className="w-full bg-green-600 hover:bg-green-500 text-black font-bold uppercase tracking-widest text-xs py-3 rounded mt-4 transition-colors disabled:opacity-50">
+                        {requestStatus === 'submitting' ? 'Generating...' : 'Generate & Open Ticket'}
                       </button>
                     </form>
                   </div>
@@ -394,6 +469,7 @@ export default function App() {
                           <thead className="bg-green-900/20 text-green-500 uppercase tracking-widest sticky top-0 backdrop-blur-md">
                             <tr>
                               <th className="p-4 font-medium">Guest</th>
+                              <th className="p-4 font-medium">Type</th>
                               <th className="p-4 font-medium">Passes</th>
                               <th className="p-4 font-medium">ID</th>
                               <th className="p-4 font-medium text-right">Action</th>
@@ -402,12 +478,13 @@ export default function App() {
                           <tbody className="divide-y divide-green-900/20">
                             {ticketDatabase.length === 0 ? (
                               <tr>
-                                <td colSpan={4} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
+                                <td colSpan={5} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
                               </tr>
                             ) : (
                               ticketDatabase.map((ticket: any, idx: any) => (
                                 <tr key={idx} className="hover:bg-green-900/10 transition-colors">
                                   <td className="p-4 text-white">{ticket.name}</td>
+                                  <td className="p-4 text-white">{ticket.type || 'General'}</td>
                                   <td className="p-4 text-gray-400">{ticket.quantity}</td>
                                   <td className="p-4 text-gray-500 font-mono">{ticket.id.split('-')[2]}</td>
                                   <td className="p-4 text-right">
@@ -524,38 +601,8 @@ export default function App() {
                 )}
               </div>
             </div>
-          ) : requestStatus === 'pending' || requestStatus === 'approving' ? (
-            /* --- PENDING VERIFICATION VIEW --- */
-            <div className="w-full max-w-md bg-[#1a0205]/80 border border-red-900/40 backdrop-blur-2xl rounded-3xl p-10 shadow-2xl text-center animate-fade-in print-hide">
-              <div className="w-16 h-16 rounded-full border border-yellow-500/30 flex items-center justify-center mx-auto mb-8 relative">
-                <div className="absolute inset-0 bg-yellow-500/10 rounded-full animate-ping opacity-50"></div>
-                <Mail className="text-yellow-500 relative z-10" size={24} />
-              </div>
-              <h2 className="text-xl font-light tracking-widest uppercase mb-4 text-white">Request Lodged</h2>
-              <p className="text-gray-400 font-light text-sm leading-relaxed mb-8">
-                Verification sent for <span className="text-white">{name}</span>. Awaiting final clearance for {quantity} pass{quantity > 1 ? 'es' : ''}.
-              </p>
-              
-              <div className="mt-8 pt-8 border-t border-white/5 relative">
-                <p className="text-[10px] text-gray-600 tracking-[0.3em] uppercase mb-4">Simulate Clearance</p>
-                <button 
-                  onClick={handleAdminApprove}
-                  disabled={requestStatus === 'approving'}
-                  className="w-full bg-green-900/20 hover:bg-green-900/40 border border-green-500/20 text-green-400 py-4 text-xs tracking-[0.2em] uppercase rounded-sm transition-all flex justify-center items-center space-x-2"
-                >
-                  {requestStatus === 'approving' ? (
-                    <span className="animate-pulse">Generating Asset...</span>
-                  ) : (
-                    <>
-                      <CheckCircle size={14} />
-                      <span>Approve Credentials</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
           ) : (
-            /* --- THE 3D VIP TICKET VIEW --- */
+            /* --- THE 3D TICKET VIEW --- */
             <div className="w-full flex flex-col items-center animate-fade-in-up mt-[-40px]">
               
               <p className="text-xs text-green-400 tracking-[0.3em] uppercase mb-12 animate-pulse drop-shadow-md print-hide">Credentials Verified</p>
@@ -584,7 +631,6 @@ export default function App() {
 
                   {/* Left Side: The Main Pass */}
                   <div className="relative flex-1 p-8 md:p-12 bg-gradient-to-br from-[#3a0612] via-[#1a0205] to-[#0a0102] overflow-hidden">
-                    {/* Using pure CSS radial gradient here instead of an external image to ensure the canvas export never fails due to CORS */}
                     <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.2) 1px, transparent 1px)', backgroundSize: '15px 15px' }}></div>
                     
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#D4AF37] via-[#FFF8DC] to-[#D4AF37]"></div>
@@ -595,14 +641,14 @@ export default function App() {
                         <div>
                           <div className="flex items-center space-x-2 text-yellow-500 mb-6 border border-yellow-500/30 px-3 py-1 inline-flex rounded-sm">
                             <Sparkles size={12} />
-                            <span className="text-[10px] font-bold tracking-[0.4em] uppercase">VIP All Access</span>
+                            <span className="text-[10px] font-bold tracking-[0.4em] uppercase">Theatre</span>
                           </div>
                           
                           <h2 className="text-xs md:text-sm uppercase tracking-[0.5em] text-gray-400 mb-4" style={{ fontFamily: "'Montserrat', sans-serif" }}>
                             A Musical Journey
                           </h2>
                           <h1 
-                            className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] via-[#FFF8DC] to-[#D4AF37] mb-1"
+                            className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text text-3d-gold mb-1"
                             style={{ fontFamily: "'Abhaya Libre', serif" }}
                           >
                             ස්වරාංග
@@ -626,7 +672,7 @@ export default function App() {
                             <img 
                               src={DINALI_TICKET_IMAGE_URL} 
                               alt="Dinali" 
-                              crossOrigin="anonymous" /* Helps canvas export */
+                              crossOrigin="anonymous" 
                               className="w-full h-full object-cover object-[center_top]"
                               onError={(e: any) => {
                                 e.target.onerror = null; 
@@ -670,7 +716,7 @@ export default function App() {
                       <div className="flex justify-between items-end mb-8">
                         <div>
                           <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] mb-1">Section</p>
-                          <p className="text-xl font-light text-[#D4AF37] tracking-wider">VIP</p>
+                          <p className="text-xl font-light text-[#D4AF37] tracking-wider">{userTicket.type || 'General'}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-[9px] text-gray-500 uppercase tracking-[0.3em] mb-1">Pass No.</p>
@@ -683,7 +729,7 @@ export default function App() {
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(userTicket.id)}&color=000000&bgcolor=ffffff`} 
                         alt="Ticket QR Code" 
-                        crossOrigin="anonymous" /* Crucial for canvas export of external API image */
+                        crossOrigin="anonymous"
                         className="w-28 h-28 md:w-32 md:h-32"
                       />
                     </div>
@@ -704,7 +750,6 @@ export default function App() {
                   disabled={isDownloading}
                   className="bg-white text-black font-bold uppercase tracking-[0.2em] px-8 py-4 rounded-md hover:bg-yellow-500 transition-colors flex items-center space-x-3 shadow-[0_0_20px_rgba(255,255,255,0.2)] w-full md:w-auto justify-center disabled:opacity-70 disabled:cursor-wait group relative overflow-hidden"
                 >
-                  {/* Subtle shine on hover */}
                   <div className="absolute inset-0 w-[200%] translate-x-[-100%] bg-gradient-to-r from-transparent via-white/50 to-transparent group-hover:translate-x-[50%] transition-transform duration-1000 ease-in-out"></div>
                   
                   {isDownloading ? (
@@ -734,7 +779,10 @@ export default function App() {
       {/* --- SECRET ADMIN TOGGLE --- */}
       <div className="fixed bottom-4 right-4 z-50 print-hide">
         <button 
-          onClick={() => setIsAdmin(!isAdmin)}
+          onClick={() => {
+            if (isAdmin) setIsAdmin(false);
+            else setShowAdminAuth(true);
+          }}
           className={`p-3 rounded-full backdrop-blur-md transition-all ${isAdmin ? 'bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'bg-black/40 text-gray-600 border border-white/10 hover:text-white'}`}
           title="Organizer Login"
         >
@@ -792,14 +840,6 @@ export default function App() {
           0%, 100% { opacity: 0.2; transform: scale(0.6) rotate(0deg); }
           50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
         }
-        
-        .animate-fade-in-up { animation: fade-in-up 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .animate-fade-in { animation: fade-in 0.8s ease-out forwards; }
-        .animate-shine { animation: shine 6s linear infinite; }
-        .animate-spotlight-sweep { animation: spotlight-sweep 10s ease-in-out infinite; }
-        .animate-spotlight-sweep-reverse { animation: spotlight-sweep-reverse 12s ease-in-out infinite; }
-        .animate-pulse-slow { animation: pulse-slow 5s ease-in-out infinite; }
-        .animate-twinkle-star { animation: twinkle-star 3s ease-in-out infinite; }
         
         @media print {
           body { background: white !important; color: black !important; }
