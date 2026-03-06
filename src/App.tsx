@@ -26,6 +26,11 @@ export default function App() {
     return savedSold !== null ? parseInt(savedSold, 10) + 1 : 146;
   });
 
+  const [nextOrderId, setNextOrderId] = useState(() => {
+    const saved = localStorage.getItem('dinali_next_order_id');
+    return saved !== null ? parseInt(saved, 10) : 1;
+  });
+
   // --- Organizer / Admin States ---
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminAuth, setShowAdminAuth] = useState(false);
@@ -33,6 +38,7 @@ export default function App() {
   const [authError, setAuthError] = useState(false);
   const [adminTicketType, setAdminTicketType] = useState('General'); // General or VIP
   const [customStartNumber, setCustomStartNumber] = useState<string>(''); // For overriding sequences
+  const [customOrderId, setCustomOrderId] = useState<string>(''); // For overriding order ID
 
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -52,6 +58,10 @@ export default function App() {
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50, opacity: 0 });
 
   useEffect(() => {
+    document.title = "Swaranga 2026";
+  }, []);
+
+  useEffect(() => {
     const script = document.createElement('script');
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
     script.async = true;
@@ -60,8 +70,9 @@ export default function App() {
     localStorage.setItem('dinali_tickets_sold', ticketsSold.toString());
     localStorage.setItem('dinali_max_tickets', maxTickets.toString());
     localStorage.setItem('dinali_sequence_num', nextSequenceNumber.toString());
+    localStorage.setItem('dinali_next_order_id', nextOrderId.toString());
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
-  }, [ticketsSold, maxTickets, nextSequenceNumber, ticketDatabase]);
+  }, [ticketsSold, maxTickets, nextSequenceNumber, nextOrderId, ticketDatabase]);
 
   const handleAdminAuth = (e: any) => {
     e.preventDefault();
@@ -83,6 +94,10 @@ export default function App() {
     const guestName = name || "VIP Guest";
     const type = isAdmin ? adminTicketType : "General";
     const source = isAdmin ? "Admin" : "Public"; // Identifies who generated the ticket
+    
+    // Calculate sequential order ID
+    const currentOrderId = customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
+    const purchaseId = currentOrderId.toString();
 
     setRequestStatus('submitting');
     
@@ -96,8 +111,9 @@ export default function App() {
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const payload = {
+      purchaseId: purchaseId, // Added to payload
       name: guestName,
-      source: source, // Added to payload
+      source: source,
       email: email,
       quantity: quantity,
       ticketId: uniqueId,
@@ -123,13 +139,14 @@ export default function App() {
     } finally {
       // Generate the visual ticket regardless of network success
       setTimeout(() => {
-        generateFinalTicket(guestName, email, quantity, uniqueId, type, ticketNumString, endNum);
+        generateFinalTicket(guestName, email, quantity, uniqueId, type, ticketNumString, endNum, purchaseId, currentOrderId);
       }, 800);
     }
   };
 
-  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any, type: string, ticketNumString: string, endNum: number) => {
+  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any, type: string, ticketNumString: string, endNum: number, purchaseId: string, currentOrderId: number) => {
     const finalTicket = {
+      purchaseId: purchaseId,
       name: guestName,
       email: guestEmail || 'No Email Provided',
       quantity: qty,
@@ -146,7 +163,9 @@ export default function App() {
     setUserTicket(finalTicket);
     setTicketsSold(prev => prev + qty);
     setNextSequenceNumber(endNum + 1);
+    setNextOrderId(currentOrderId + 1);
     setCustomStartNumber(''); // Reset override after use
+    setCustomOrderId(''); // Reset order ID override
     setTicketDatabase([finalTicket, ...ticketDatabase]);
     setRequestStatus('approved');
   };
@@ -390,7 +409,7 @@ export default function App() {
           
           {isAdmin && !userTicket ? (
             /* --- ORGANIZER DASHBOARD --- */
-            <div className="w-full max-w-5xl relative group animate-fade-in print-hide">
+            <div className="w-full max-w-6xl relative group animate-fade-in print-hide">
               <div className="absolute -inset-1 bg-gradient-to-r from-green-600/20 to-emerald-900/40 rounded-3xl blur-xl opacity-50"></div>
               
               <div className="relative w-full bg-[#0a120a]/90 border border-green-900/40 backdrop-blur-2xl rounded-3xl p-8 md:p-10 shadow-2xl">
@@ -492,21 +511,23 @@ export default function App() {
                         <table className="w-full text-left text-xs">
                           <thead className="bg-green-900/20 text-green-500 uppercase tracking-widest sticky top-0 backdrop-blur-md">
                             <tr>
+                              <th className="p-4 font-medium">Order ID</th>
                               <th className="p-4 font-medium">Guest</th>
                               <th className="p-4 font-medium">Type</th>
                               <th className="p-4 font-medium">Passes</th>
-                              <th className="p-4 font-medium">ID</th>
+                              <th className="p-4 font-medium">Ticket #</th>
                               <th className="p-4 font-medium text-right">Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-green-900/20">
                             {ticketDatabase.length === 0 ? (
                               <tr>
-                                <td colSpan={5} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
+                                <td colSpan={6} className="p-8 text-center text-gray-500">No tickets generated yet.</td>
                               </tr>
                             ) : (
                               ticketDatabase.map((ticket: any, idx: any) => (
                                 <tr key={idx} className="hover:bg-green-900/10 transition-colors">
+                                  <td className="p-4 text-yellow-500 font-mono text-[10px]">{ticket.purchaseId}</td>
                                   <td className="p-4 text-white">{ticket.name}</td>
                                   <td className="p-4 text-white">{ticket.type || 'General'}</td>
                                   <td className="p-4 text-gray-400">{ticket.quantity}</td>
@@ -528,12 +549,12 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* --- NEW: Advanced System Controls --- */}
+                  {/* --- Advanced System Controls --- */}
                   <div className="lg:col-span-3 bg-black/40 border border-green-900/20 p-6 rounded-2xl">
                     <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6 flex items-center gap-2">
                       <Lock size={16} /> System Controls
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div>
                         <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Ticket No.</label>
                         <div className="flex items-center">
@@ -549,8 +570,24 @@ export default function App() {
                           Leave blank to auto-increment.
                         </p>
                       </div>
+
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Order ID</label>
+                        <div className="flex items-center">
+                          <input
+                            type="number"
+                            value={customOrderId}
+                            onChange={(e: any) => setCustomOrderId(e.target.value)}
+                            placeholder={`Default next: ${nextOrderId}`}
+                            className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Sequential order number (1, 2, 3...).
+                        </p>
+                      </div>
                       
-                      {/* NEW: Override Tickets Sold */}
+                      {/* Override Tickets Sold */}
                       <div>
                         <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Tickets Sold</label>
                         <input
