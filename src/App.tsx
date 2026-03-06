@@ -100,7 +100,7 @@ export default function App() {
     const ticketNumString = `${baseTicketNo}${qty > 1 ? ` - ${endNum}` : ''}`;
     const uniqueId = `DINALI-26-${baseTicketNo.toString().padStart(3, '0')}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbzHHX3n418Sah0RBIPTqMp0uoasiC_wYozXSFa8k9Sb7VK4og99B_oT86MIVNwnq4mX/exec";
+    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbzsUapa9ilXS3sce41rirL_9Jpw5GR_G_7JWEWAGYu6tF3hJEz9Kn8y6UzgN-gyAHY/exec";
 
     const payload = {
       action: "generate",
