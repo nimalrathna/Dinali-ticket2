@@ -82,6 +82,7 @@ export default function App() {
     
     const guestName = name || "VIP Guest";
     const type = isAdmin ? adminTicketType : "General";
+    const source = isAdmin ? "Admin" : "Public"; // Identifies who generated the ticket
 
     setRequestStatus('submitting');
     
@@ -96,6 +97,7 @@ export default function App() {
 
     const payload = {
       name: guestName,
+      source: source, // Added to payload
       email: email,
       quantity: quantity,
       ticketId: uniqueId,
@@ -531,9 +533,9 @@ export default function App() {
                     <h3 className="text-sm font-medium uppercase tracking-widest text-green-400 mb-6 flex items-center gap-2">
                       <Lock size={16} /> System Controls
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                       <div>
-                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Ticket Number Sequence</label>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Next Ticket No.</label>
                         <div className="flex items-center">
                           <input
                             type="number"
@@ -544,9 +546,24 @@ export default function App() {
                           />
                         </div>
                         <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
-                          Leave blank to auto-increment. Overriding this changes the assigned ticket number (e.g., jump to 900 for VIPs) <strong>without</strong> messing up your "Tickets Sold" count.
+                          Leave blank to auto-increment.
                         </p>
                       </div>
+                      
+                      {/* NEW: Override Tickets Sold */}
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Override Tickets Sold</label>
+                        <input
+                          type="number"
+                          value={ticketsSold}
+                          onChange={(e: any) => setTicketsSold(parseInt(e.target.value, 10) || 0)}
+                          className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                          Reset or adjust the sold counter manually.
+                        </p>
+                      </div>
+
                       <div>
                         <label className="text-xs text-gray-500 uppercase tracking-widest block mb-2">Maximum Venue Capacity</label>
                         <input
@@ -556,7 +573,7 @@ export default function App() {
                           className="bg-black/50 border border-green-900/50 px-4 py-3 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm w-full transition-colors"
                         />
                         <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
-                          Currently caps public sales at {maxTickets} total passes.
+                          Caps public sales at {maxTickets} total passes.
                         </p>
                       </div>
                     </div>
