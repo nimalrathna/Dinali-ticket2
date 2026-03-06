@@ -43,7 +43,7 @@ export default function App() {
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
   }, [ticketsSold, ticketDatabase]);
 
-  const handleGenerateTicket = (e) => {
+  const handleGenerateTicket = (e: any) => {
     e.preventDefault();
     if (ticketsSold + quantity > MAX_TICKETS) return;
     if (!name && !isAdmin) return; 
@@ -99,7 +99,7 @@ export default function App() {
     }
   };
 
-  const generateFinalTicket = (guestName, guestEmail, qty, predefinedId = null) => {
+  const generateFinalTicket = (guestName: any, guestEmail: any, qty: any, predefinedId: any = null) => {
     const newTicketNumber = ticketsSold + qty;
     const formattedNumber = newTicketNumber.toString().padStart(3, '0');
     const uniqueId = predefinedId || `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -131,7 +131,7 @@ export default function App() {
     setRequestStatus('idle');
   };
 
-  const viewExistingTicket = (ticket) => {
+  const viewExistingTicket = (ticket: any) => {
     setUserTicket(ticket);
     setRequestStatus('approved');
   };
@@ -174,7 +174,7 @@ export default function App() {
   };
 
   // --- 3D Tilt Logic ---
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: any) => {
     if (!ticketRef.current) return;
     const rect = ticketRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -355,14 +355,14 @@ export default function App() {
                       <input 
                         type="text" 
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e: any) => setName(e.target.value)}
                         className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
                         placeholder="Guest Name (e.g. Smith Family)"
                       />
                       <input 
                         type="email" 
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e: any) => setEmail(e.target.value)}
                         className="w-full bg-transparent border-b border-green-900/50 px-2 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 text-sm"
                         placeholder="Email (Optional)"
                       />
@@ -370,10 +370,10 @@ export default function App() {
                         <span className="text-gray-400 text-sm px-2">Total Passes</span>
                         <select
                           value={quantity}
-                          onChange={(e) => setQuantity(parseInt(e.target.value, 10))}
+                          onChange={(e: any) => setQuantity(parseInt(e.target.value, 10))}
                           className="bg-transparent text-white focus:outline-none text-right"
                         >
-                          {[...Array(20)].map((_, i) => (
+                          {[...Array(20)].map((_: any, i: any) => (
                             <option key={i + 1} value={i + 1} className="bg-black">{i + 1}</option>
                           ))}
                         </select>
@@ -404,7 +404,7 @@ export default function App() {
                                 <td colSpan="4" className="p-8 text-center text-gray-500">No tickets generated yet.</td>
                               </tr>
                             ) : (
-                              ticketDatabase.map((ticket, idx) => (
+                              ticketDatabase.map((ticket: any, idx: any) => (
                                 <tr key={idx} className="hover:bg-green-900/10 transition-colors">
                                   <td className="p-4 text-white">{ticket.name}</td>
                                   <td className="p-4 text-gray-400">{ticket.quantity}</td>
@@ -467,7 +467,7 @@ export default function App() {
                         type="text" 
                         required
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e: any) => setName(e.target.value)}
                         className="w-full bg-transparent border-b border-red-900/50 px-2 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors text-lg font-light tracking-wide"
                         placeholder="Guest Name"
                       />
@@ -477,7 +477,7 @@ export default function App() {
                         type="email" 
                         required
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e: any) => setEmail(e.target.value)}
                         className="w-full bg-transparent border-b border-red-900/50 px-2 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors text-lg font-light tracking-wide"
                         placeholder="Email Address"
                       />
@@ -487,11 +487,11 @@ export default function App() {
                       <span className="text-gray-300 font-light tracking-wide px-2">Passes</span>
                       <select
                         value={quantity}
-                        onChange={(e) => setQuantity(parseInt(e.target.value, 10))}
+                        onChange={(e: any) => setQuantity(parseInt(e.target.value, 10))}
                         className="bg-transparent text-white text-xl font-light focus:outline-none appearance-none cursor-pointer pr-4 text-right"
                         style={{ textAlignLast: 'right' }}
                       >
-                        {[...Array(Math.min(10, ticketsRemaining))].map((_, i) => (
+                        {[...Array(Math.min(10, ticketsRemaining))].map((_: any, i: any) => (
                           <option key={i + 1} value={i + 1} className="bg-[#1a0205]">{i + 1}</option>
                         ))}
                       </select>
@@ -627,7 +627,7 @@ export default function App() {
                               alt="Dinali" 
                               crossOrigin="anonymous" /* Helps canvas export */
                               className="w-full h-full object-cover object-[center_top]"
-                              onError={(e) => {
+                              onError={(e: any) => {
                                 e.target.onerror = null; 
                                 e.target.src = "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80";
                               }}
@@ -688,7 +688,7 @@ export default function App() {
                     </div>
 
                     <div className="w-full h-8 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')] bg-repeat-x opacity-40 flex">
-                      {[...Array(30)].map((_, i) => (
+                      {[...Array(30)].map((_: any, i: any) => (
                         <div key={i} className="h-full bg-white" style={{ width: Math.random() * 4 + 1 + 'px', marginRight: Math.random() * 3 + 1 + 'px' }}></div>
                       ))}
                     </div>
