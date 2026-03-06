@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Clock, MapPin, Ticket, Download, CheckCircle, ChevronRight, Mail, Sparkles, Lock, ShieldCheck, Users, DollarSign, Send } from 'lucide-react';
+import { Calendar, Clock, MapPin, Ticket, Download, CheckCircle, ChevronRight, Mail, Sparkles, Lock, ShieldCheck, Users, DollarSign, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 // Ensure the attached photo is saved in your project's "public" folder as "dinali-portrait.jpg"
 const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
@@ -7,9 +7,9 @@ const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
 export default function App() {
   const TICKET_PRICE = 40;
   
-  // Set the document title for PDF saving
+  // Set the document title
   useEffect(() => {
-    document.title = "Tickets-Swaranga Dinali Live in Concert 27June";
+    document.title = "Swaranga 2026";
   }, []);
 
   // --- Dynamic Capacity State ---
@@ -58,6 +58,7 @@ export default function App() {
   const [customStartNumber, setCustomStartNumber] = useState<string>(''); // For overriding ticket sequences
   const [requestStatus, setRequestStatus] = useState<string>('idle');
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   
   const [userTicket, setUserTicket] = useState<any>(null);
 
@@ -66,6 +67,12 @@ export default function App() {
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50, opacity: 0 });
 
   useEffect(() => {
+    // Inject html2canvas for high-res ticket downloading
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    script.async = true;
+    document.body.appendChild(script);
+
     localStorage.setItem('dinali_tickets_sold', ticketsSold.toString());
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
     localStorage.setItem('dinali_max_tickets', maxTickets.toString());
@@ -207,6 +214,57 @@ export default function App() {
       alert("There was an error trying to resend the ticket.");
     } finally {
       setResendingId(null);
+    }
+  };
+
+  // --- Download as High-Res Image Logic ---
+  const downloadTicketAsImage = async () => {
+    if (!ticketRef.current || !(window as any).html2canvas) return;
+    
+    setIsDownloading(true);
+    const element = ticketRef.current as any;
+
+    // Temporarily remove the 3D mouse transform to get a flat, perfect screenshot
+    const originalTransform = element.style.transform;
+    element.style.transform = 'none';
+
+    // FIX FOR BLANK LETTERS: html2canvas struggles with transparent gradients
+    // We swap it to solid gold just for the screenshot, then swap back!
+    const goldTextElements = element.querySelectorAll('.text-3d-gold');
+    goldTextElements.forEach((el: any) => {
+      el.classList.remove('text-3d-gold');
+      el.style.color = '#D4AF37';
+      el.style.textShadow = '0px 2px 4px rgba(0,0,0,0.8)';
+    });
+
+    try {
+      const canvas = await (window as any).html2canvas(element, {
+        useCORS: true, 
+        scale: 2,      
+        backgroundColor: '#1a0205', 
+        logging: false
+      });
+
+      // Restore all visual styles
+      element.style.transform = originalTransform;
+      goldTextElements.forEach((el: any) => {
+        el.classList.add('text-3d-gold');
+        el.style.color = '';
+        el.style.textShadow = '';
+      });
+
+      // Convert canvas to a downloadable image
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement('a');
+      link.download = `Swaranga_Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
+      link.href = image;
+      link.click();
+    } catch (err) {
+      console.error("Failed to generate image:", err);
+      element.style.transform = originalTransform;
+      alert("Something went wrong generating the image. Please try again.");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -396,7 +454,7 @@ export default function App() {
               <span className="hidden md:block text-[#D4AF37]/50">|</span>
               <div className="flex items-center space-x-3">
                 <MapPin size={16} className="text-[#D4AF37]" />
-                <span>Pioneer Theatre</span>
+                <span>Pioneer Theatre, Castle Hill</span>
               </div>
             </div>
           </div>
@@ -833,6 +891,7 @@ export default function App() {
                             <img 
                               src={DINALI_TICKET_IMAGE_URL} 
                               alt="Dinali" 
+                              crossOrigin="anonymous" 
                               className="w-full h-full object-cover object-[center_top]"
                               onError={(e: any) => {
                                 e.target.onerror = null; 
@@ -854,7 +913,7 @@ export default function App() {
                         </div>
                         <div>
                           <p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Venue</p>
-                          <p className="font-light text-sm tracking-wider">Pioneer Theatre</p>
+                          <p className="font-light text-sm tracking-wider">{userTicket.venue}</p>
                         </div>
                         <div>
                           <p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Admit</p>
@@ -888,6 +947,7 @@ export default function App() {
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(userTicket.id)}&color=000000&bgcolor=ffffff`} 
                         alt="Ticket QR Code" 
+                        crossOrigin="anonymous"
                         className="w-28 h-28 md:w-32 md:h-32"
                       />
                     </div>
@@ -901,13 +961,26 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Action Buttons Below Ticket */}
               <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-6 print-hide w-full max-w-4xl mt-8">
                 <button 
-                  onClick={() => window.print()} 
-                  className="bg-white text-black font-bold uppercase tracking-[0.2em] px-8 py-4 rounded-md hover:bg-yellow-500 transition-colors flex items-center space-x-2 shadow-[0_0_20px_rgba(255,255,255,0.2)] w-full md:w-auto justify-center"
+                  onClick={downloadTicketAsImage} 
+                  disabled={isDownloading}
+                  className="bg-white text-black font-bold uppercase tracking-[0.2em] px-8 py-4 rounded-md hover:bg-yellow-500 transition-colors flex items-center space-x-3 shadow-[0_0_20px_rgba(255,255,255,0.2)] w-full md:w-auto justify-center disabled:opacity-70 disabled:cursor-wait group relative overflow-hidden"
                 >
-                  <Download size={18} />
-                  <span>Download PDF ticket</span>
+                  <div className="absolute inset-0 w-[200%] translate-x-[-100%] bg-gradient-to-r from-transparent via-white/50 to-transparent group-hover:translate-x-[50%] transition-transform duration-1000 ease-in-out"></div>
+                  
+                  {isDownloading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Saving Ticket...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon size={18} />
+                      <span>Save as Image</span>
+                    </>
+                  )}
                 </button>
                 <button 
                   onClick={handleReset} 
