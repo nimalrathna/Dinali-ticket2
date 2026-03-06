@@ -119,7 +119,7 @@ export default function App() {
     };
 
     // Your live Google Apps Script URL
-    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwXt3wR8n_VHpEVPj5IChr8fSnwNSD-CTtcif4vbwvyX6twT8UCFPVr79vj61Vx2uM/exec";
+    const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbzHHX3n418Sah0RBIPTqMp0uoasiC_wYozXSFa8k9Sb7VK4og99B_oT86MIVNwnq4mX/exec";
 
     // Fire and forget the network request so the user isn't stuck waiting
     fetch(GOOGLE_API_URL, {
@@ -205,7 +205,7 @@ export default function App() {
     }
   };
 
-  // --- Download as High-Res Image Logic ---
+  // --- Download as High-Res Image Logic (Mobile Optimized) ---
   const downloadTicketAsImage = async () => {
     if (!ticketRef.current || !(window as any).html2canvas) return;
     
@@ -243,12 +243,40 @@ export default function App() {
         logging: false
       });
 
-      // Convert canvas to a downloadable image
-      const image = canvas.toDataURL("image/png");
-      const link = document.createElement('a');
-      link.download = `Swaranga_Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
-      link.href = image;
-      link.click();
+      // Convert canvas to a downloadable image URL
+      const fileName = `Swaranga_Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      
+      if (blob) {
+        const file = new File([blob], fileName, { type: 'image/png' });
+        
+        // Use Native Share API for mobile devices (iOS/Android) to allow saving directly to Photos
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Swaranga Ticket',
+              text: 'Here is my ticket for the Swaranga concert!'
+            });
+          } catch (shareErr: any) {
+            // Ignore if the user simply cancelled the iOS Share Sheet
+            if (shareErr.name !== 'AbortError') {
+              // Fallback if sharing fails for an unexpected reason
+              const link = document.createElement('a');
+              link.download = fileName;
+              link.href = canvas.toDataURL("image/png");
+              link.click();
+            }
+          }
+        } else {
+          // Fallback for Desktop browsers / Laptops
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = canvas.toDataURL("image/png");
+          link.click();
+        }
+      }
+
     } catch (err) {
       console.error("Failed to generate image:", err);
       alert("Something went wrong generating the image. Please try again.");
