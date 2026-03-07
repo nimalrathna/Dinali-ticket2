@@ -3,8 +3,8 @@ import { Calendar, Clock, MapPin, Ticket, Download, CheckCircle, ChevronRight, M
 
 // Ensure the attached photo is saved in your project's "public" folder as "dinali-portrait.jpg"
 const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
-// Ensure this matches your live published Google Apps Script URL
-const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbz2MjyT3I40vSM2tNvkIhQheltjZn-DqLx3ZMGlCmrTWkWCSNXq6M2nPNpeeDMd2Cti/exec";
+// LIVE GOOGLE APPS SCRIPT URL
+const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyMTbd4b6Yu_RlknTBLQvp4HOHutMjJyasaXQHeE1_zx3QFzrf6y79L6wSosYk8HLeV/exec";
 
 export default function App() {
   const TICKET_PRICE = 40;
@@ -164,7 +164,6 @@ export default function App() {
       }
     } catch (error) {
       console.error("Backend Error:", error);
-      // PHANTOM TICKET FIX: Do NOT generate a fake local ticket if the server drops for public
       alert("We are experiencing high traffic and couldn't connect to the ticketing server. Please try again.");
       setRequestStatus('idle');
     }
@@ -340,7 +339,6 @@ export default function App() {
     if (adminPassword === 'Dinali1984') { setIsAdmin(true); setShowAdminAuth(false); setAdminPassword(''); } else { setAuthError(true); }
   };
 
-  // Re-added Missing Factory Reset logic
   const handleFactoryReset = () => {
     setTicketsSold(0);
     setNextOrderId(1);
