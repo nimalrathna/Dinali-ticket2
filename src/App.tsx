@@ -4,7 +4,7 @@ import { Calendar, Clock, MapPin, Ticket, Download, CheckCircle, ChevronRight, M
 // Ensure the attached photo is saved in your project's "public" folder as "dinali-portrait.jpg"
 const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
 // LIVE GOOGLE APPS SCRIPT URL
-const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyMTbd4b6Yu_RlknTBLQvp4HOHutMjJyasaXQHeE1_zx3QFzrf6y79L6wSosYk8HLeV/exec";
+const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyY35NOnjBIvseJyujdhyjWXRv4YQSASe303DwioifiCIDift2yaf3jtylzvMcX0xAL/exec";
 
 export default function App() {
   const TICKET_PRICE = 40;
