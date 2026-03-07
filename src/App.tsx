@@ -26,7 +26,7 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<boolean>(false);
   const [adminTicketType, setAdminTicketType] = useState<string>('General');
-  const [confirmReset, setConfirmReset] = useState<boolean>(false); // Re-added missing state
+  const [confirmReset, setConfirmReset] = useState<boolean>(false); 
   
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -127,12 +127,13 @@ export default function App() {
     };
 
     if (isAdmin) {
+      // Admin bypasses validation to allow manual overrides unconditionally
       fetch(GOOGLE_API_URL, { method: "POST", body: JSON.stringify(payload) });
       generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, baseOrderId, type, ticketNumString, endNum);
       return;
     }
 
-    // Public Check - Wait for Server's True Number Lock
+    // Public Check - Wait for Server's True Number Lock & Validation
     try {
       const response = await fetch(GOOGLE_API_URL, {
         method: "POST",
@@ -152,11 +153,20 @@ export default function App() {
           0 // End num 0 because local sequence isn't trusted for public tracking
         );
       } else {
-        throw new Error("Backend failed");
+        if (result.error === "SOLD_OUT") {
+          alert("We're sorry, but the event just sold out while processing your request!");
+          // Sync server to get updated max capacity to lock UI
+          setTicketsSold(maxTickets); 
+        } else {
+          throw new Error("Backend failed");
+        }
+        setRequestStatus('idle');
       }
     } catch (error) {
       console.error("Backend Error:", error);
-      generateFinalTicket(guestName, guestEmail, guestMobile, qty, uniqueId, purchaseId, baseOrderId, type, ticketNumString, endNum);
+      // PHANTOM TICKET FIX: Do NOT generate a fake local ticket if the server drops for public
+      alert("We are experiencing high traffic and couldn't connect to the ticketing server. Please try again.");
+      setRequestStatus('idle');
     }
   };
 
