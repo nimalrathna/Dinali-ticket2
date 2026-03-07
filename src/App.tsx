@@ -39,6 +39,7 @@ export default function App() {
   const [adminTicketType, setAdminTicketType] = useState('General'); // General or VIP
   const [customStartNumber, setCustomStartNumber] = useState<string>(''); // For overriding sequences
   const [customOrderId, setCustomOrderId] = useState<string>(''); // For overriding order ID
+  const [confirmReset, setConfirmReset] = useState(false); // Restored confirm reset state
 
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -95,23 +96,23 @@ export default function App() {
     const type = isAdmin ? adminTicketType : "General";
     const source = isAdmin ? "Admin" : "Public"; // Identifies who generated the ticket
     
-    // Calculate sequential order ID
+    // Calculate sequential order ID as a fallback fallback
     const currentOrderId = customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
     const purchaseId = currentOrderId.toString();
 
     setRequestStatus('submitting');
     
-    // Calculate precise ticket numbering
+    // Calculate precise ticket numbering as a local fallback
     const startNum = customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
     const endNum = startNum + quantity - 1;
     const ticketNumString = `${startNum}${quantity > 1 ? ` - ${endNum}` : ''}`;
     
-    // Unique ID generation based on the ending sequence number
     const formattedNumber = endNum.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const payload = {
-      purchaseId: purchaseId, // Added to payload
+      action: "generate", // CRITICAL FOR BACKEND ROUTING
+      purchaseId: purchaseId, 
       name: guestName,
       source: source,
       email: email,
@@ -119,28 +120,56 @@ export default function App() {
       ticketId: uniqueId,
       ticketNumber: ticketNumString,
       totalPrice: quantity * TICKET_PRICE,
-      ticketType: type
+      ticketType: type,
+      incrementSeq: !customStartNumber,  // Tells server to handle sequencing if not overridden
+      incrementOrder: !customOrderId     // Tells server to handle order IDs if not overridden
     };
 
     try {
-      // Your live Google Apps Script URL
-      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyfzAvAi0OUrhYwMBKLvd0BTAhAoE4UKx5fM2s1mPtCb-JzQZLNW28CPATlDW2yux3U/exec";
+      const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwEAl6PCJ3OiU9i5ePGhz0z67vIYQ0X31-wo5S0aVtDAM_XP3EIBaZBdrso761FxZDG/exec";
 
-      // Send the data directly to Google Sheets
-      await fetch(GOOGLE_API_URL, {
+      // Await the server so that the server becomes the source of truth for IDs
+      const response = await fetch(GOOGLE_API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "text/plain;charset=utf-8",
         },
         body: JSON.stringify(payload)
       });
+      const result = await response.json();
+
+      if (result.success) {
+        // Use the SERVER returned IDs to avoid desync
+        generateFinalTicket(
+          guestName, 
+          email, 
+          quantity, 
+          result.uniqueId || uniqueId, 
+          type, 
+          result.ticketNumber || ticketNumString, 
+          result.endNum > 0 ? result.endNum : endNum, 
+          result.orderId || purchaseId, 
+          parseInt(result.orderId || currentOrderId, 10)
+        );
+      } else {
+        if (result.error === "SOLD_OUT") {
+          alert("We're sorry, but the event just sold out!");
+          setTicketsSold(maxTickets);
+        } else {
+          throw new Error("Backend failed");
+        }
+        setRequestStatus('idle');
+      }
+
     } catch (error) {
       console.error("Failed to connect to backend:", error);
-    } finally {
-      // Generate the visual ticket regardless of network success
-      setTimeout(() => {
+      if (isAdmin) {
+        alert("Warning: Ticketing server is unreachable. Ticket generated locally and might duplicate IDs when you reconnect.");
         generateFinalTicket(guestName, email, quantity, uniqueId, type, ticketNumString, endNum, purchaseId, currentOrderId);
-      }, 800);
+      } else {
+        alert("We are experiencing high traffic and couldn't connect to the ticketing server. Please try again.");
+        setRequestStatus('idle');
+      }
     }
   };
 
@@ -183,7 +212,21 @@ export default function App() {
     setRequestStatus('approved');
   };
 
-  // --- Download as High-Res Image Logic ---
+  // --- Restored Factory Reset Function ---
+  const handleFactoryReset = () => {
+    setTicketsSold(0);
+    setNextOrderId(1);
+    setNextSequenceNumber(146);
+    setTicketDatabase([]);
+    setConfirmReset(false);
+    localStorage.removeItem('dinali_ticket_database');
+    localStorage.removeItem('dinali_tickets_sold');
+    localStorage.removeItem('dinali_max_tickets');
+    localStorage.removeItem('dinali_next_order_id');
+    localStorage.removeItem('dinali_sequence_num');
+  };
+
+  // --- Download as High-Res Image Logic (RESTORED iPHONE FIX) ---
   const downloadTicketAsImage = async () => {
     if (!ticketRef.current || !(window as any).html2canvas) return;
     
@@ -198,6 +241,7 @@ export default function App() {
     // We swap it to solid gold just for the screenshot, then swap back!
     const goldTextElements = element.querySelectorAll('.text-3d-gold');
     goldTextElements.forEach((el: any) => {
+      el.dataset.originalClass = el.className;
       el.classList.remove('text-3d-gold');
       el.style.color = '#D4AF37';
       el.style.textShadow = '0px 2px 4px rgba(0,0,0,0.8)';
@@ -214,17 +258,41 @@ export default function App() {
       // Restore all visual styles
       element.style.transform = originalTransform;
       goldTextElements.forEach((el: any) => {
-        el.classList.add('text-3d-gold');
+        el.className = el.dataset.originalClass;
         el.style.color = '';
         el.style.textShadow = '';
       });
 
-      // Convert canvas to a downloadable image
-      const image = canvas.toDataURL("image/png");
-      const link = document.createElement('a');
-      link.download = `Swaranga_Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
-      link.href = image;
-      link.click();
+      const fileName = `Swaranga_Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
+      const dataUrl = canvas.toDataURL("image/png");
+      
+      // IPHONE FALLBACK LOGIC
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const nav = navigator as any;
+
+      if (isMobile && blob && nav.canShare && nav.canShare({ files: [new File([blob], fileName, { type: 'image/png' })] })) {
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await nav.share({ files: [file] });
+        } catch (shareErr: any) {
+          if (shareErr.name !== 'AbortError') {
+            const link = document.createElement('a'); 
+            link.download = fileName; 
+            link.href = dataUrl; 
+            link.click();
+          }
+        }
+      } else {
+        // Desktop fallback
+        const link = document.createElement('a'); 
+        link.download = fileName; 
+        link.href = dataUrl; 
+        document.body.appendChild(link); 
+        link.click(); 
+        document.body.removeChild(link);
+      }
+
     } catch (err) {
       console.error("Failed to generate image:", err);
       element.style.transform = originalTransform;
@@ -613,6 +681,17 @@ export default function App() {
                           Caps public sales at {maxTickets} total passes.
                         </p>
                       </div>
+                    </div>
+                    
+                    {/* RESTORED FACTORY RESET BUTTON */}
+                    <div className="mt-8 pt-6 border-t border-green-900/30 flex justify-end items-center">
+                      <button 
+                        onClick={() => setConfirmReset(!confirmReset)} 
+                        onDoubleClick={handleFactoryReset} 
+                        className={`text-xs border px-6 py-3 rounded-lg transition-all ${confirmReset ? 'bg-red-900 text-white border-red-900' : 'text-red-500 border-red-900/30 hover:bg-red-900/20'}`}
+                      >
+                        {confirmReset ? "Double Click to Reset Local Database" : "Clear Local Cache & Reset"}
+                      </button>
                     </div>
                   </div>
 
