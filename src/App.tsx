@@ -12,6 +12,12 @@ export default function App() {
   
   useEffect(() => {
     document.title = "Swaranga 2026";
+    
+    // Inject superior html-to-image renderer for perfect gradient & blur exports
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js";
+    script.async = true;
+    document.body.appendChild(script);
   }, []);
 
   // --- Core States ---
@@ -80,11 +86,6 @@ export default function App() {
   }, [isServerSynced]);
 
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-    script.async = true;
-    document.body.appendChild(script);
-
     localStorage.setItem('dinali_ticket_database', JSON.stringify(ticketDatabase));
   }, [ticketDatabase]);
 
@@ -248,65 +249,47 @@ export default function App() {
     }
   };
 
+  // --- PERFECT IMAGE DOWNLOADER ---
   const downloadTicketAsImage = async () => {
-    if (!ticketRef.current || !(window as any).html2canvas) return;
+    if (!ticketRef.current || !(window as any).htmlToImage) {
+      alert("Image processor is loading. Please try again in a few seconds.");
+      return;
+    }
     
     setIsDownloading(true);
 
-    // Wait for the specific fonts to finish loading to prevent text shifting
-    await document.fonts.ready;
-
-    const element = ticketRef.current as any;
-    const originalTransform = element.style.transform;
-    element.style.transform = 'none';
-
-    // 1. Temporarily hide lighting glare
-    const glareOverlay = element.querySelector('.mix-blend-screen');
-    if (glareOverlay) glareOverlay.style.display = 'none';
-
-    // 2. Fix the "Missing Letters" bug by forcefully solidifying transparent gradients 
-    const transparentTexts = element.querySelectorAll('.text-transparent');
-    transparentTexts.forEach((el: any) => {
-      el.dataset.wasTransparent = 'true';
-      el.classList.remove('text-transparent');
-      el.classList.remove('bg-clip-text');
-      el.style.webkitTextFillColor = '#D4AF37';
-      el.style.color = '#D4AF37';
-    });
-
-    const goldTextElements = element.querySelectorAll('.text-3d-gold');
-    goldTextElements.forEach((el: any) => {
-      el.dataset.originalClass = el.className;
-      el.className = el.className.replace('text-3d-gold', '');
-      el.style.backgroundImage = 'none';
-      el.style.webkitBackgroundClip = 'unset';
-      el.style.webkitTextFillColor = '#D4AF37';
-      el.style.color = '#D4AF37';
-      el.style.textShadow = '0px 2px 4px rgba(0,0,0,0.8)';
-    });
-
-    // 3. Fix the "Yellow Box" bug caused by html2canvas breaking on CSS blurs
-    const blurs = element.querySelectorAll('.backdrop-blur-md');
-    blurs.forEach((el: any) => {
-      el.dataset.oldBackdrop = el.style.backdropFilter || '';
-      el.style.backdropFilter = 'none';
-      el.style.webkitBackdropFilter = 'none';
-      el.style.backgroundColor = 'rgba(26, 2, 5, 0.9)'; // Apply solid fallback color
-    });
-
     try {
-      const canvas = await (window as any).html2canvas(element, {
-        useCORS: true, 
-        scale: 2,      
+      // Wait for the specific fonts to finish loading to prevent text shifting
+      await document.fonts.ready;
+
+      const element = ticketRef.current as any;
+      
+      // Temporarily flatten out the 3D rotation so it saves as a flat image
+      const originalTransform = element.style.transform;
+      element.style.transform = 'none';
+
+      // Temporarily hide the interactive glare overlay
+      const glareOverlay = element.querySelector('.mix-blend-screen');
+      if (glareOverlay) glareOverlay.style.display = 'none';
+
+      // html-to-image natively understands CSS gradients, blurs, and background-clip!
+      const dataUrl = await (window as any).htmlToImage.toPng(element, { 
+        quality: 1,
+        pixelRatio: 2, // High resolution     
         backgroundColor: '#1a0205', 
-        logging: false
+        style: {
+          transform: 'none'
+        }
       });
 
-      const image = canvas.toDataURL("image/png");
+      // Restore interactive styles instantly
+      element.style.transform = originalTransform;
+      if (glareOverlay) glareOverlay.style.display = '';
+
       const filename = `Swaranga_Ticket_${userTicket.name.replace(/\s+/g, '_')}.png`;
 
       try {
-        const blob = await (await fetch(image)).blob();
+        const blob = await (await fetch(dataUrl)).blob();
         const file = new File([blob], filename, { type: 'image/png' });
         
         // Cast navigator to any to bypass strict TypeScript compilation errors
@@ -325,42 +308,14 @@ export default function App() {
         // Fallback for desktop and unsupported browsers
         const link = document.createElement('a');
         link.download = filename;
-        link.href = image;
+        link.href = dataUrl;
         link.click();
       }
 
     } catch (err) {
       console.error("Failed to generate image:", err);
-      alert("Something went wrong generating the image. Please try again.");
+      alert("Something went wrong capturing the image. Please try again.");
     } finally {
-      // 4. Restore original styles perfectly
-      element.style.transform = originalTransform;
-      if (glareOverlay) glareOverlay.style.display = '';
-      
-      transparentTexts.forEach((el: any) => {
-        if (el.dataset.wasTransparent === 'true') {
-          el.classList.add('text-transparent');
-          el.classList.add('bg-clip-text');
-          el.style.webkitTextFillColor = '';
-          el.style.color = '';
-        }
-      });
-
-      goldTextElements.forEach((el: any) => {
-        el.className = el.dataset.originalClass;
-        el.style.backgroundImage = '';
-        el.style.webkitBackgroundClip = '';
-        el.style.webkitTextFillColor = '';
-        el.style.color = '';
-        el.style.textShadow = '';
-      });
-
-      blurs.forEach((el: any) => {
-        el.style.backdropFilter = el.dataset.oldBackdrop;
-        el.style.webkitBackdropFilter = el.dataset.oldBackdrop;
-        el.style.backgroundColor = '';
-      });
-      
       setIsDownloading(false);
     }
   };
