@@ -28,6 +28,7 @@ export default function App() {
   const [authError, setAuthError] = useState<boolean>(false);
   const [confirmReset, setConfirmReset] = useState<boolean>(false);
   const [adminTicketType, setAdminTicketType] = useState<string>('General');
+  const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
 
   const [ticketDatabase, setTicketDatabase] = useState<any[]>(() => {
     const saved = localStorage.getItem('dinali_ticket_database');
@@ -54,27 +55,28 @@ export default function App() {
   const ticketRef = useRef<any>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50, opacity: 0 });
 
-  // --- Sync Initial Load with Server ---
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const response = await fetch(GOOGLE_API_URL, {
-          method: "POST",
-          body: JSON.stringify({ action: "init" })
-        });
-        const result = await response.json();
-        if (result.success) {
-          setMaxTickets(result.maxTickets);
-          setTicketsSold(result.ticketsSold);
-          setNextOrderId(result.nextOrderId);
-          setNextSequenceNumber(result.nextSeqNo);
-          setIsServerSynced(true);
-        }
-      } catch (error) {
-        console.error("Failed to sync with server on load:", error);
+  // --- Server Sync Function ---
+  const syncWithServer = async () => {
+    try {
+      const response = await fetch(GOOGLE_API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "init" })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setMaxTickets(result.maxTickets);
+        setTicketsSold(result.ticketsSold);
+        setNextOrderId(result.nextOrderId);
+        setNextSequenceNumber(result.nextSeqNo);
+        setIsServerSynced(true);
       }
-    };
-    if (!isServerSynced) fetchInitialData();
+    } catch (error) {
+      console.error("Failed to sync with server:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!isServerSynced) syncWithServer();
   }, [isServerSynced]);
 
   useEffect(() => {
@@ -104,23 +106,13 @@ export default function App() {
     processTicketAndSendToBackend(guestName, email, mobile, adultQuantity, childQuantity, type);
   };
 
-  const processTicketAndSendToBackend = (guestName: string, guestEmail: string, guestMobile: string, adultQty: number, childQty: number, type: string) => {
+  const processTicketAndSendToBackend = async (guestName: string, guestEmail: string, guestMobile: string, adultQty: number, childQty: number, type: string) => {
     const totalQty = adultQty + childQty;
     const totalPrice = (adultQty * ADULT_PRICE) + (childQty * CHILD_PRICE);
 
-    const startNum = customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber;
-    const endNum = startNum + totalQty - 1;
-    const ticketNumString = `${startNum}${totalQty > 1 ? ` - ${endNum}` : ''}`;
-    
-    const formattedNumber = endNum.toString().padStart(3, '0');
-    const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    
-    const currentOrderId = customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
-    const purchaseId = currentOrderId.toString();
-
-    const payload = {
+    // Build payload to send. We let the server safely assign the concurrent IDs, UNLESS the admin explicitly overrides them
+    const payload: any = {
       action: "generate",
-      purchaseId: purchaseId,
       source: isAdmin ? "Admin" : "Public",
       name: guestName,
       email: guestEmail,
@@ -128,28 +120,38 @@ export default function App() {
       quantity: totalQty, 
       adultQuantity: adultQty,
       childQuantity: childQty,
-      ticketId: uniqueId,
-      ticketNumber: ticketNumString,
       totalPrice: totalPrice,
       ticketType: type
     };
 
-    fetch(GOOGLE_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8",
-      },
-      body: JSON.stringify(payload)
-    }).catch(error => console.error("Failed to connect to backend:", error));
-    
-    setTimeout(() => {
-      generateFinalTicket(guestName, guestEmail, guestMobile, adultQty, childQty, uniqueId, purchaseId, currentOrderId, type, ticketNumString, endNum);
-    }, 800);
+    if (customOrderId) payload.purchaseId = customOrderId;
+    if (customStartNumber) payload.customStartNumber = customStartNumber;
+
+    try {
+      // Securely await the server to process the lock and return authoritative sequential numbers
+      const response = await fetch(GOOGLE_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      
+      const result = await response.json();
+
+      if (result.success) {
+        generateFinalTicket(guestName, guestEmail, guestMobile, adultQty, childQty, result.uniqueId, result.orderId, type, result.ticketNumber);
+      } else {
+        alert("Server Alert: " + (result.error === "SOLD_OUT" ? "The venue capacity has been reached." : result.error));
+        setRequestStatus('idle');
+      }
+    } catch (error) {
+      console.error("Failed to connect to backend:", error);
+      alert("Network error while trying to secure your passes. Please ensure you have internet access and try again.");
+      setRequestStatus('idle');
+    }
   };
 
-  const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, adultQty: number, childQty: number, predefinedId: any = null, purchaseId: string = "N/A", currentOrderId: number = nextOrderId, type: string = "General", ticketNumString: string = "", endNum: number = nextSequenceNumber) => {
+  const generateFinalTicket = (guestName: string, guestEmail: string, guestMobile: string, adultQty: number, childQty: number, uniqueId: string, purchaseId: string, type: string, ticketNumString: string) => {
     const totalQty = adultQty + childQty;
-    const uniqueId = predefinedId || `DINALI-26-${endNum.toString().padStart(3, '0')}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const finalTicket = {
       purchaseId: purchaseId,
@@ -160,7 +162,7 @@ export default function App() {
       adultQuantity: adultQty,
       childQuantity: childQty,
       totalPrice: (adultQty * ADULT_PRICE) + (childQty * CHILD_PRICE),
-      number: ticketNumString || `${ticketsSold + 1}${totalQty > 1 ? ` - ${ticketsSold + totalQty}` : ''}`,
+      number: ticketNumString,
       id: uniqueId,
       date: "Saturday 27th June 2026",
       time: "6.00pm",
@@ -170,13 +172,44 @@ export default function App() {
     };
 
     setUserTicket(finalTicket);
-    setTicketsSold(prev => prev + totalQty);
-    setNextSequenceNumber(endNum + 1);
-    setNextOrderId(currentOrderId + 1); 
-    setCustomOrderId(''); 
-    setCustomStartNumber(''); 
     setTicketDatabase([finalTicket, ...ticketDatabase]);
     setRequestStatus('approved');
+    
+    // Auto-pull fresh counters from the server so other devices are in sync
+    syncWithServer();
+    
+    // Clear custom overrides if the admin used them
+    setCustomOrderId(''); 
+    setCustomStartNumber(''); 
+  };
+
+  // --- Admin: Push Overrides to Server ---
+  const handleSaveServerSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const response = await fetch(GOOGLE_API_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "update_settings",
+          maxTickets: maxTickets,
+          nextOrderId: customOrderId ? parseInt(customOrderId, 10) : nextOrderId,
+          nextSeqNo: customStartNumber ? parseInt(customStartNumber, 10) : nextSequenceNumber,
+          ticketsSold: ticketsSold
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        alert("Success! The system counters have been overridden and synchronized across all devices.");
+        setCustomOrderId('');
+        setCustomStartNumber('');
+        syncWithServer(); // Pull the freshly saved state
+      } else {
+        alert("Failed to save settings to the Google Sheet.");
+      }
+    } catch (e) {
+      alert("Network error while updating system settings.");
+    }
+    setIsSavingSettings(false);
   };
 
   const handleResendTicket = async (ticket: any) => {
@@ -202,9 +235,7 @@ export default function App() {
     try {
       await fetch(GOOGLE_API_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload)
       });
       
@@ -221,23 +252,46 @@ export default function App() {
     if (!ticketRef.current || !(window as any).html2canvas) return;
     
     setIsDownloading(true);
-    const element = ticketRef.current as any;
 
+    // Wait for the specific fonts to finish loading to prevent text shifting
+    await document.fonts.ready;
+
+    const element = ticketRef.current as any;
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
+    // 1. Temporarily hide lighting glare
     const glareOverlay = element.querySelector('.mix-blend-screen');
     if (glareOverlay) glareOverlay.style.display = 'none';
+
+    // 2. Fix the "Missing Letters" bug by forcefully solidifying transparent gradients 
+    const transparentTexts = element.querySelectorAll('.text-transparent');
+    transparentTexts.forEach((el: any) => {
+      el.dataset.wasTransparent = 'true';
+      el.classList.remove('text-transparent');
+      el.classList.remove('bg-clip-text');
+      el.style.webkitTextFillColor = '#D4AF37';
+      el.style.color = '#D4AF37';
+    });
 
     const goldTextElements = element.querySelectorAll('.text-3d-gold');
     goldTextElements.forEach((el: any) => {
       el.dataset.originalClass = el.className;
       el.className = el.className.replace('text-3d-gold', '');
       el.style.backgroundImage = 'none';
-      el.style.webkitBackgroundClip = 'initial';
-      el.style.webkitTextFillColor = 'initial';
+      el.style.webkitBackgroundClip = 'unset';
+      el.style.webkitTextFillColor = '#D4AF37';
       el.style.color = '#D4AF37';
       el.style.textShadow = '0px 2px 4px rgba(0,0,0,0.8)';
+    });
+
+    // 3. Fix the "Yellow Box" bug caused by html2canvas breaking on CSS blurs
+    const blurs = element.querySelectorAll('.backdrop-blur-md');
+    blurs.forEach((el: any) => {
+      el.dataset.oldBackdrop = el.style.backdropFilter || '';
+      el.style.backdropFilter = 'none';
+      el.style.webkitBackdropFilter = 'none';
+      el.style.backgroundColor = 'rgba(26, 2, 5, 0.9)'; // Apply solid fallback color
     });
 
     try {
@@ -255,7 +309,7 @@ export default function App() {
         const blob = await (await fetch(image)).blob();
         const file = new File([blob], filename, { type: 'image/png' });
         
-        // FIX: Cast navigator to any to bypass strict TypeScript compilation errors
+        // Cast navigator to any to bypass strict TypeScript compilation errors
         const nav = navigator as any;
 
         if (nav.canShare && nav.canShare({ files: [file] })) {
@@ -279,9 +333,19 @@ export default function App() {
       console.error("Failed to generate image:", err);
       alert("Something went wrong generating the image. Please try again.");
     } finally {
+      // 4. Restore original styles perfectly
       element.style.transform = originalTransform;
       if (glareOverlay) glareOverlay.style.display = '';
       
+      transparentTexts.forEach((el: any) => {
+        if (el.dataset.wasTransparent === 'true') {
+          el.classList.add('text-transparent');
+          el.classList.add('bg-clip-text');
+          el.style.webkitTextFillColor = '';
+          el.style.color = '';
+        }
+      });
+
       goldTextElements.forEach((el: any) => {
         el.className = el.dataset.originalClass;
         el.style.backgroundImage = '';
@@ -289,6 +353,12 @@ export default function App() {
         el.style.webkitTextFillColor = '';
         el.style.color = '';
         el.style.textShadow = '';
+      });
+
+      blurs.forEach((el: any) => {
+        el.style.backdropFilter = el.dataset.oldBackdrop;
+        el.style.webkitBackdropFilter = el.dataset.oldBackdrop;
+        el.style.backgroundColor = '';
       });
       
       setIsDownloading(false);
@@ -753,10 +823,19 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="mt-8 pt-6 border-t border-green-900/30 flex justify-end">
+                    <div className="mt-8 pt-6 border-t border-green-900/30 flex flex-col sm:flex-row justify-between items-center gap-4">
+                      <button 
+                        onClick={handleSaveServerSettings}
+                        disabled={isSavingSettings}
+                        className="w-full sm:w-auto bg-green-600 hover:bg-green-500 text-black font-bold text-xs uppercase tracking-widest px-6 py-3 rounded-lg transition-colors flex justify-center items-center gap-2 disabled:opacity-50"
+                      >
+                        {isSavingSettings ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                        Sync Overrides to Server
+                      </button>
+
                       <button 
                         onClick={handleFactoryReset} 
-                        className={`text-xs uppercase font-bold tracking-widest border px-6 py-3 rounded-lg transition-all flex items-center gap-2 ${confirmReset ? 'bg-red-900/80 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-red-500/80 border-red-900/30 hover:text-red-400 hover:border-red-500/50 bg-black/40'}`}
+                        className={`w-full sm:w-auto text-xs uppercase font-bold tracking-widest border px-6 py-3 rounded-lg transition-all flex justify-center items-center gap-2 ${confirmReset ? 'bg-red-900/80 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-red-500/80 border-red-900/30 hover:text-red-400 hover:border-red-500/50 bg-black/40'}`}
                       >
                         {confirmReset ? "Are you sure? Click to Confirm" : "Factory Reset Local Data"}
                       </button>
@@ -1056,7 +1135,7 @@ export default function App() {
 
       <div className="fixed bottom-4 right-4 z-50 print-hide">
         <button 
-          onClick={() => setIsAdmin(!isAdmin)}
+          onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminAuth(true)}
           className={`p-3 rounded-full backdrop-blur-md transition-all ${isAdmin ? 'bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'bg-black/40 text-gray-600 border border-white/10 hover:text-white'}`}
           title="Organizer Login"
         >
