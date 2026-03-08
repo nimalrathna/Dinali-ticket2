@@ -4,13 +4,12 @@ import { Calendar, Clock, MapPin, Ticket, Download, CheckCircle, ChevronRight, M
 // Ensure the attached photo is saved in your project's "public" folder as "dinali-portrait.jpg"
 const DINALI_TICKET_IMAGE_URL = "/dinali-portrait.jpg";
 // LIVE GOOGLE APPS SCRIPT URL
-const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwLn3Kl5SNeFa98Uks8Ocwpl9CjSS51S3-yE4Eok4hk6J7nt6gCBNwqGOBgAvsl8v0K/exec";
+const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbxerEaAtVzRim2alzMuwAiDJkereGDtQcO11aw8AzdxBiSDCyvPMuSnQ9YLKY113nnU/exec";
 
 export default function App() {
   const ADULT_PRICE = 40;
   const CHILD_PRICE = 15;
   
-  // Set the document title
   useEffect(() => {
     document.title = "Swaranga 2026";
   }, []);
@@ -79,7 +78,6 @@ export default function App() {
   }, [isServerSynced]);
 
   useEffect(() => {
-    // Inject html2canvas for high-res ticket downloading
     const script = document.createElement('script');
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
     script.async = true;
@@ -117,7 +115,6 @@ export default function App() {
     const formattedNumber = endNum.toString().padStart(3, '0');
     const uniqueId = `DINALI-26-${formattedNumber}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
     
-    // Use custom sequence if provided by admin, otherwise use the auto-incrementing ID
     const currentOrderId = customOrderId ? parseInt(customOrderId, 10) : nextOrderId;
     const purchaseId = currentOrderId.toString();
 
@@ -128,16 +125,15 @@ export default function App() {
       name: guestName,
       email: guestEmail,
       mobile: guestMobile, 
-      quantity: totalQty, // Legacy total quantity param
-      adultQuantity: adultQty, // New
-      childQuantity: childQty, // New
+      quantity: totalQty, 
+      adultQuantity: adultQty,
+      childQuantity: childQty,
       ticketId: uniqueId,
       ticketNumber: ticketNumString,
       totalPrice: totalPrice,
       ticketType: type
     };
 
-    // Fire and forget the network request so the user isn't stuck waiting
     fetch(GOOGLE_API_URL, {
       method: "POST",
       headers: {
@@ -146,7 +142,6 @@ export default function App() {
       body: JSON.stringify(payload)
     }).catch(error => console.error("Failed to connect to backend:", error));
     
-    // Instantly generate UI Ticket after a tiny UX delay
     setTimeout(() => {
       generateFinalTicket(guestName, guestEmail, guestMobile, adultQty, childQty, uniqueId, purchaseId, currentOrderId, type, ticketNumString, endNum);
     }, 800);
@@ -222,7 +217,6 @@ export default function App() {
     }
   };
 
-  // --- Download as High-Res Image Logic (Mobile Optimized) ---
   const downloadTicketAsImage = async () => {
     if (!ticketRef.current || !(window as any).html2canvas) return;
     
@@ -260,9 +254,12 @@ export default function App() {
       try {
         const blob = await (await fetch(image)).blob();
         const file = new File([blob], filename, { type: 'image/png' });
+        
+        // FIX: Cast navigator to any to bypass strict TypeScript compilation errors
+        const nav = navigator as any;
 
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
+        if (nav.canShare && nav.canShare({ files: [file] })) {
+          await nav.share({
             files: [file],
             title: 'Swaranga Ticket',
             text: 'Here is my ticket for the Swaranga concert!'
@@ -271,6 +268,7 @@ export default function App() {
           throw new Error('Web Share API not supported on this device');
         }
       } catch (shareError) {
+        // Fallback for desktop and unsupported browsers
         const link = document.createElement('a');
         link.download = filename;
         link.href = image;
@@ -550,7 +548,7 @@ export default function App() {
                     <DollarSign className="text-green-500" size={32} />
                     <div>
                       <p className="text-xs text-gray-500 uppercase tracking-widest">Est. Revenue</p>
-                      <p className="text-2xl font-light text-white">${ticketsSold * TICKET_PRICE}</p>
+                      <p className="text-2xl font-light text-white">${ticketsSold * ADULT_PRICE}</p> {/* Base est on adult price */}
                     </div>
                   </div>
                 </div>
@@ -656,7 +654,9 @@ export default function App() {
                                   </td>
                                   <td className="p-4 text-gray-400">
                                     {ticket.quantity} 
-                                    <span className="text-[9px] text-gray-600 block">({ticket.adultQuantity}A, {ticket.childQuantity}C)</span>
+                                    <span className="text-[9px] text-gray-600 block">
+                                      ({ticket.adultQuantity !== undefined ? ticket.adultQuantity : ticket.quantity}A, {ticket.childQuantity || 0}C)
+                                    </span>
                                   </td>
                                   <td className="p-4 text-gray-500 font-mono">{ticket.id.split('-')[2]}</td>
                                   <td className="p-4 text-right">
@@ -776,10 +776,6 @@ export default function App() {
                   <div>
                     <h2 className="text-3xl font-light tracking-wide mb-1 text-white">Reserve</h2>
                     <p className="text-[#D4AF37] text-xs uppercase tracking-[0.2em]">Official Ticketing</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="block text-2xl font-light text-white">${ADULT_PRICE}</span>
-                    <span className="text-gray-500 text-xs uppercase tracking-widest">Per Pass</span>
                   </div>
                 </div>
 
@@ -979,7 +975,7 @@ export default function App() {
                         <div>
                           <p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Admit</p>
                           <p className="font-light text-sm tracking-wider">
-                            {userTicket.adultQuantity} Adult(s)
+                            {userTicket.adultQuantity !== undefined ? userTicket.adultQuantity : userTicket.quantity} Adult(s)
                             {userTicket.childQuantity > 0 ? `, ${userTicket.childQuantity} Child` : ''}
                           </p>
                         </div>
