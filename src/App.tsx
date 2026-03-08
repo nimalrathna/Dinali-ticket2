@@ -925,7 +925,22 @@ export default function App() {
             /* --- THE 3D TICKET VIEW --- */
             <div className="w-full flex flex-col items-center animate-fade-in-up mt-[-40px]">
               
-              <p className="text-xs text-green-400 tracking-[0.3em] uppercase mb-12 animate-pulse drop-shadow-md print-hide">Credentials Verified</p>
+              <div className="text-center mb-10 print-hide flex flex-col items-center z-50">
+                <p className="text-xs text-green-400 tracking-[0.3em] uppercase mb-4 animate-pulse drop-shadow-md">Credentials Verified</p>
+                <div className="bg-[#1a0205]/80 backdrop-blur-sm border border-[#D4AF37]/40 px-6 py-4 rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.15)] max-w-md">
+                  <h4 className="text-[#D4AF37] font-bold text-sm tracking-widest uppercase mb-2 flex items-center justify-center gap-2">
+                    <Mail size={16} /> {userTicket.email !== 'No Email Provided' ? 'Payment Info Emailed' : 'Payment Required'}
+                  </h4>
+                  <p className="text-gray-300 text-xs leading-relaxed">
+                    Your passes are reserved! {userTicket.email !== 'No Email Provided' ? (
+                      <>We have emailed the <strong>payment instructions</strong> to <span className="text-white">{userTicket.email}</span>. </>
+                    ) : (
+                      <>Please ensure the payment transfer is completed to finalize this booking. </>
+                    )}
+                    You can now save your digital pass below.
+                  </p>
+                </div>
+              </div>
 
               <div 
                 className="perspective-1000 mb-12"
