@@ -272,11 +272,17 @@ export default function App() {
       const glareOverlay = element.querySelector('.mix-blend-screen');
       if (glareOverlay) glareOverlay.style.display = 'none';
 
-      // html-to-image natively understands CSS gradients, blurs, and background-clip!
+      // 1. SAFARI/iOS WARM-UP PASS (Fixes the "click twice" & "missing photo" bugs)
+      // Browsers often fail to fetch and inline lazy images on the very first screenshot attempt.
+      // Doing an immediate, invisible dummy pass forces the browser to fully cache the assets.
+      await (window as any).htmlToImage.toPng(element, { cacheBust: true });
+
+      // 2. ACTUAL HIGH-RES RENDER
       const dataUrl = await (window as any).htmlToImage.toPng(element, { 
         quality: 1,
         pixelRatio: 2, // High resolution     
         backgroundColor: '#1a0205', 
+        cacheBust: true, // Crucial for ensuring fresh assets are used
         style: {
           transform: 'none'
         }
@@ -982,7 +988,7 @@ export default function App() {
                             <img 
                               src={DINALI_TICKET_IMAGE_URL} 
                               alt="Dinali" 
-                              crossOrigin="anonymous" 
+                              // Removed crossOrigin="anonymous" to fix the "missing photo" bug on Apple devices
                               className="w-full h-full object-cover object-[center_top]"
                               onError={(e: any) => {
                                 e.target.onerror = null; 
